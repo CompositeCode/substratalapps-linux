@@ -1,0 +1,88 @@
+{
+ "defaults": {
+  "light": "moss-paper",
+  "dark": "forest-floor"
+ },
+ "themes": [
+  {
+   "id": "teal-ledger",
+   "name": "Teal Ledger",
+   "mode": "light",
+   "default": false,
+   "description": "The wordmark's teal on cool, barely-tinted greys. Calm and closest to the current mockups.",
+   "swatch": "#137C7A"
+  },
+  {
+   "id": "indigo-root",
+   "name": "Indigo Root",
+   "mode": "light",
+   "default": false,
+   "description": "The mark's root indigo with lavender-tinted neutrals taken from the icon surface.",
+   "swatch": "#3D3BB8"
+  },
+  {
+   "id": "moss-paper",
+   "name": "Moss Paper",
+   "mode": "light",
+   "default": true,
+   "description": "A deepened lime (moss) on warm paper. Earthy, the most 'substrate' of the five.",
+   "swatch": "#4A7322"
+  },
+  {
+   "id": "coral-clay",
+   "name": "Coral Clay",
+   "mode": "light",
+   "default": false,
+   "description": "The bracket coral, darkened for text contrast, on warm clay neutrals.",
+   "swatch": "#B44529"
+  },
+  {
+   "id": "spore-pink",
+   "name": "Spore Pink",
+   "mode": "light",
+   "default": false,
+   "description": "The cap pink, deepened to raspberry, on faintly rosy neutrals. The boldest light option.",
+   "swatch": "#B3285B"
+  },
+  {
+   "id": "night-soil",
+   "name": "Night Soil",
+   "mode": "dark",
+   "default": false,
+   "description": "The icon's night indigo as the base, periwinkle accent. Matches the dark app icon exactly.",
+   "swatch": "#8E8CFF"
+  },
+  {
+   "id": "deep-teal",
+   "name": "Deep Teal",
+   "mode": "dark",
+   "default": false,
+   "description": "Blue-green depths with the wordmark's light teal. Continuous with Teal Ledger.",
+   "swatch": "#55CFC9"
+  },
+  {
+   "id": "graphite-spore",
+   "name": "Graphite Spore",
+   "mode": "dark",
+   "default": false,
+   "description": "Neutral graphite, so the OS chrome feels native, with the cap pink as a single bright accent.",
+   "swatch": "#FF86AE"
+  },
+  {
+   "id": "forest-floor",
+   "name": "Forest Floor",
+   "mode": "dark",
+   "default": true,
+   "description": "Green-black soil with a lime accent. Pairs with Moss Paper.",
+   "swatch": "#B8E26A"
+  },
+  {
+   "id": "ember-clay",
+   "name": "Ember Clay",
+   "mode": "dark",
+   "default": false,
+   "description": "Warm charcoal with the light coral accent. Pairs with Coral Clay.",
+   "swatch": "#FF9A80"
+  }
+ ]
+}

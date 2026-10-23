@@ -1,5 +1,10 @@
 # Plan 2: What the API is missing for a management app
 
+> **Update, 2026-10-23.** Merged since this was written: #58 test-user expiry, #60 self-service apps, #61 audit export, #62 SCIM, and #68 `GET /users?role_id=` (§7.2) plus sign out everywhere (`POST /users/{id}/sessions/revoke-all`, part of §4). #69 exposes `Deprecation`/`Sunset` to browsers. The spec is now 1.0.0-draft.9 with 124 operations.
+>
+> The specs moved the Console to the web Hub with its own Ops gateway (specs OPEN-QUESTIONS #27). The API-side asks for it are tracked as API issues G5–G20 (#42–#57), so §3's `ops` Lambda is one option rather than the plan of record.
+
+
 **Status:** proposal, 2026-10-21. Once agreed, this belongs in the API repo (`CompositeCode/substratalapps.com`) and follows that repo's "Rules for every change": spec page and changelog first, then `make gen`, contract tests, and expand-only migrations.
 **Verified against:** `origin/main` `364ce5b` (2026-10-21, `openapi.yaml` 1.0.0-draft.4, 118 operations), `infra/terraform/prod`, `internal/core`, the open PRs #58/#60/#61/#62, and the live API (`https://api.substratalapps.com`, probed 2026-10-21).
 **Companion:** [PLAN-management-app.md](PLAN-management-app.md). The section numbers §1–§10 below are the ones Plan 1 cites. They match the macOS plan's numbering so the API team gets one list from every client team. §10 is new here.

@@ -1,0 +1,23 @@
+# Linux development and CI image for the Substratal Hub.
+# Ubuntu 24.04 ships GTK 4.14 and libadwaita 1.5, the minimums in
+# linux/PLATFORM-SPEC.md, so building here proves the floor works.
+#
+#   docker build -t substratal-hub-dev -f build-aux/docker/Dockerfile.dev .
+#   docker run --rm -v "$PWD":/src -w /src substratal-hub-dev cargo test --workspace
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup \
+    PATH=/usr/local/cargo/bin:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential ca-certificates curl git pkg-config \
+      libgtk-4-dev libadwaita-1-dev blueprint-compiler \
+      libdbus-1-dev libssl-dev \
+      gettext desktop-file-utils appstream libglib2.0-bin \
+      librsvg2-common xvfb xauth imagemagick dbus-x11 fonts-cantarell fonts-dejavu-core adwaita-icon-theme \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --component clippy,rustfmt \
+    && chmod -R a+w $CARGO_HOME $RUSTUP_HOME

@@ -1,0 +1,37 @@
+# Builds the Flatpak bundle (GNOME 50 runtime) for x86_64 and aarch64.
+# Download it from the run's artifacts and install with
+#   flatpak install --user substratal-hub.flatpak
+name: Flatpak
+
+on:
+  push:
+    branches: [main]
+    paths: ["crates/**", "data/**", "build-aux/flatpak/**", "Cargo.lock"]
+  pull_request:
+    paths: ["build-aux/flatpak/**", "data/**", "Cargo.lock", ".github/workflows/flatpak.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flatpak:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v7
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: substratal-hub-${{ matrix.arch }}.flatpak
+          manifest-path: build-aux/flatpak/com.substratalapps.Hub.json
+          arch: ${{ matrix.arch }}
+          cache-key: flatpak-builder-${{ github.sha }}

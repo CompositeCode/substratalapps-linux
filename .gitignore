@@ -1,0 +1,8 @@
+/target
+/_site
+/_specs
+/_archive
+.DS_Store
+/build-aux/flatpak/.flatpak-builder
+/build-aux/flatpak/build-dir
+/_screens

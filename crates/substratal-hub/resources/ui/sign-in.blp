@@ -1,0 +1,167 @@
+// AUTH-01 Sign in and AUTH-02 Two-factor challenge (linux/SCREENS.md).
+// A separate AdwWindow shown before the main window; AdwClamp keeps the
+// form readable from 360 sp phones to 4K monitors.
+using Gtk 4.0;
+using Adw 1;
+
+Adw.Window sign_in_window {
+  title: _("Sign in — Substratal");
+  default-width: 480;
+  default-height: 640;
+  width-request: 360;
+  height-request: 294;
+
+  content: Adw.ToastOverlay toasts {
+    Adw.NavigationView nav {
+      Adw.NavigationPage {
+        title: _("Sign in");
+        tag: "AUTH-01";
+
+        Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {
+            show-title: false;
+
+            [end]
+            Gtk.Button help_button {
+              icon-name: "help-about-symbolic";
+              tooltip-text: _("Help (F1)");
+              action-name: "signin.help";
+            }
+          }
+
+          [top]
+          Adw.Banner env_banner {
+            revealed: false;
+          }
+
+          content: Gtk.ScrolledWindow {
+            hscrollbar-policy: never;
+
+            Adw.Clamp {
+              maximum-size: 400;
+              margin-top: 24;
+              margin-bottom: 24;
+              margin-start: 16;
+              margin-end: 16;
+
+              Gtk.Box {
+                orientation: vertical;
+                spacing: 24;
+                valign: center;
+
+                Gtk.Picture logo {
+                  height-request: 64;
+                  can-shrink: true;
+                  content-fit: contain;
+                  alternative-text: _("Substratal Apps");
+                }
+
+                Gtk.Label {
+                  label: _("Sign in to Substratal");
+                  styles ["title-1"]
+                }
+
+                Gtk.ListBox {
+                  selection-mode: none;
+                  styles ["boxed-list"]
+
+                  Adw.EntryRow email_row {
+                    title: _("Email");
+                    input-purpose: email;
+                    activates-default: true;
+                  }
+
+                  Adw.PasswordEntryRow password_row {
+                    title: _("Password");
+                    activates-default: true;
+                  }
+                }
+
+                Gtk.Label error_label {
+                  visible: false;
+                  wrap: true;
+                  xalign: 0;
+                  styles ["error"]
+                }
+
+                Gtk.Button sign_in_button {
+                  label: _("Sign in");
+                  sensitive: false;
+                  halign: center;
+                  styles ["suggested-action", "pill"]
+                }
+
+                Gtk.Box {
+                  halign: center;
+                  spacing: 12;
+
+                  Gtk.LinkButton forgot_link {
+                    label: _("Forgot password?");
+                  }
+
+                  Gtk.LinkButton sign_up_link {
+                    label: _("Create an account");
+                  }
+                }
+              }
+            }
+          };
+        }
+      }
+
+      Adw.NavigationPage mfa_page {
+        title: _("Two-factor authentication");
+        tag: "AUTH-02";
+
+        Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Adw.Clamp {
+            maximum-size: 400;
+            margin-top: 24;
+            margin-start: 16;
+            margin-end: 16;
+
+            Gtk.Box {
+              orientation: vertical;
+              spacing: 24;
+
+              Adw.StatusPage {
+                icon-name: "dialog-password-symbolic";
+                title: _("Enter your code");
+                description: _("Open your authenticator app and enter the 6-digit code for Substratal. You can also use one of your recovery codes.");
+              }
+
+              Gtk.ListBox {
+                selection-mode: none;
+                styles ["boxed-list"]
+
+                Adw.EntryRow code_row {
+                  title: _("6-digit code or recovery code");
+                  input-purpose: digits;
+                  activates-default: true;
+                }
+              }
+
+              Gtk.Label mfa_error_label {
+                visible: false;
+                wrap: true;
+                xalign: 0;
+                styles ["error"]
+              }
+
+              Gtk.Button verify_button {
+                label: _("Verify");
+                sensitive: false;
+                halign: center;
+                styles ["suggested-action", "pill"]
+              }
+            }
+          };
+        }
+      }
+    }
+  };
+}

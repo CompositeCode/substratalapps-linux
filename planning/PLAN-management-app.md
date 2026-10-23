@@ -1,5 +1,12 @@
 # Plan 1: Substratal Console for Linux (management app for the API tier)
 
+> **Update, 2026-10-23.** Two things changed after this plan was written. See [PREREQUISITES.md](PREREQUISITES.md).
+> 1. **API versioning:** the API version is the `Substratal-Version: 1` request header, and URLs have no `/v1` prefix (API v1.7.0+). This plan already uses unprefixed paths. The macOS plan's `/v1/ops/*` should read `/ops/*`.
+> 2. **The specs now make the Console web-only** (OPEN-QUESTIONS #27): its OPS-*, SEC-01, CFG-*, RPT-01 and INT-01 screens read AWS through the web Hub's Ops gateway, and the native apps skip them. So the Linux build follows the spec's 75 Hub screens, and §3's Operations section and §4.5–4.11 are **deferred** for Linux. The screen IDs in this plan (OPS-01…10) also differ from the spec's. The spec's IDs win.
+>
+> Since 2026-10-21, the API has also shipped several Plan 2 items: `GET /users?role_id=`, sign out everywhere, audit export, self-service registration, SCIM and test-user expiry.
+
+
 **Status:** proposal, 2026-10-21
 **Target:** `https://api.substratalapps.com`, with every request sending `Substratal-Version: 1`. Live on 2026-10-21: `GET /health` returns `200 {"status":"ok"}`. The old `/v1/...` paths now return `404`.
 **Inputs reviewed:**

@@ -1,0 +1,42 @@
+/* App-specific styles. Colours only from theme roles (named colours), never
+   literals (DoD: "colours only from theme roles"). */
+
+.screen-id {
+  font-family: monospace;
+  font-size: 0.85em;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: alpha(@sub_accent, 0.12);
+  color: @sub_accent_strong;
+}
+
+.spec-caption {
+  color: @sub_text_secondary;
+}
+
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: bold;
+  font-size: 0.85em;
+}
+.status-badge.success { background: alpha(@success_color, 0.15); color: @success_color; }
+.status-badge.info { background: alpha(@accent_color, 0.15); color: @accent_color; }
+.status-badge.warning { background: alpha(@warning_color, 0.18); color: @warning_color; }
+.status-badge.critical { background: alpha(@error_color, 0.15); color: @error_color; }
+.status-badge.neutral, .status-badge.accent { background: alpha(@sub_text_secondary, 0.15); color: @sub_text_secondary; }
+
+.theme-swatch {
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 999px;
+  padding: 0;
+}
+.theme-swatch:checked {
+  outline: 3px solid @accent_color;
+  outline-offset: 2px;
+}
+
+.app-tile {
+  padding: 18px;
+}

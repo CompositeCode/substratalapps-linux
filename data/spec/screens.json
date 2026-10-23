@@ -1,0 +1,4981 @@
+{
+ "source": "CompositeCode/substratalapps-applications-specs",
+ "commit": "cebf6794b2d0ddf505abc82e7d61d175496c25df",
+ "screens": [
+  {
+   "id": "AUTH-01",
+   "title": "Sign in",
+   "section_heading": "D1 · Sign-in & Identity",
+   "domain": "D1 Sign-in & Identity",
+   "route": "/sign-in",
+   "archetype": "auth",
+   "phase": "MVP",
+   "who": "Unauthenticated",
+   "purpose": "Exchange email + password for a session, or start an MFA challenge.",
+   "loads": "",
+   "states": "Submitting: button spinner, fields read-only; Locked out (5 failures / 15 min): explain wait time",
+   "notes": "`test_mode` is never exposed in end-user UI; developer builds may show a hidden toggle (long-press logo / ⌥-click) for test-mode sign-in. The horizontal logo lockup (BrandLockup, `brand/BRAND.md`) sits above the form.",
+   "entry_points": "App launch with no stored session; Session expired / revoked (preserves `?next=` destination); Sign out",
+   "container": "Separate `AdwWindow` with `AdwClamp`",
+   "elements": [
+    {
+     "name": "Email",
+     "kind": "email-field",
+     "control": "AdwEntryRow input-purpose=email",
+     "data": "body.email",
+     "rules": "required; RFC 5322; trim; autofill username"
+    },
+    {
+     "name": "Password",
+     "kind": "password-field",
+     "control": "AdwPasswordEntryRow",
+     "data": "body.password",
+     "rules": "required; reveal toggle; autofill current-password"
+    },
+    {
+     "name": "Sign in",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "POST /auth/login",
+     "rules": "disabled until both fields non-empty"
+    },
+    {
+     "name": "Forgot password?",
+     "kind": "link",
+     "control": "GtkButton .flat / GtkLinkButton",
+     "data": "→ AUTH-05",
+     "rules": ""
+    },
+    {
+     "name": "Create an account",
+     "kind": "link",
+     "control": "GtkButton .flat / GtkLinkButton",
+     "data": "→ AUTH-03",
+     "rules": ""
+    },
+    {
+     "name": "Continue with SSO",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "POST /auth/sso/{provider}/callback",
+     "rules": "hidden behind flag `sso` (API returns 501 today)"
+    },
+    {
+     "name": "Sign in with a passkey",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "—",
+     "rules": "hidden behind flag `passkeys`; reserved for when the API supports WebAuthn"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Sign in",
+     "call": "POST /auth/login",
+     "result": "200 AuthSession → store tokens → go to `next` or APP-01. 200 MfaChallenge → AUTH-02 with mfa_token."
+    },
+    {
+     "action": "—",
+     "call": "",
+     "result": "401 → inline form error \"Email or password is incorrect.\" (never reveal which). 403 → account suspended/locked message; `test_user_expired` → \"This test account has expired.\" 429 → disable button, countdown from Retry-After."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "AUTH-02",
+   "title": "Two-factor challenge",
+   "section_heading": "D1 · Sign-in & Identity",
+   "domain": "D1 Sign-in & Identity",
+   "route": "/sign-in/mfa",
+   "archetype": "auth",
+   "phase": "MVP",
+   "who": "Holder of mfa_token",
+   "purpose": "Complete sign-in with a TOTP code or a recovery code.",
+   "loads": "",
+   "states": "Challenge expired",
+   "notes": "",
+   "entry_points": "AUTH-01 returned MfaChallenge",
+   "container": "Separate `AdwWindow` with `AdwClamp`",
+   "elements": [
+    {
+     "name": "Code",
+     "kind": "otp-field",
+     "control": "AdwEntryRow input-purpose=digits",
+     "data": "body.code",
+     "rules": "6 digits; paste fills all; auto-submit on 6th digit; OS one-time-code autofill"
+    },
+    {
+     "name": "Use a recovery code",
+     "kind": "link",
+     "control": "GtkButton .flat / GtkLinkButton",
+     "data": "swaps to Recovery code field",
+     "rules": "only if `methods` includes recovery_code"
+    },
+    {
+     "name": "Recovery code",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "body.recovery_code",
+     "rules": "format xxxx-xxxx; case-insensitive"
+    },
+    {
+     "name": "Expiry countdown",
+     "kind": "caption",
+     "control": "GtkLabel .caption .dim-label",
+     "data": "MfaChallenge.expires_in",
+     "rules": "announce at 60 s and 10 s"
+    },
+    {
+     "name": "Verify",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "POST /auth/mfa/verify",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Verify",
+     "call": "POST /auth/mfa/verify",
+     "result": "200 → same as AUTH-01 success. 401 → \"That code didn't work.\" clear field. Expired → back to AUTH-01 with message. 429 → countdown."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "AUTH-03",
+   "title": "Create account",
+   "section_heading": "D1 · Sign-in & Identity",
+   "domain": "D1 Sign-in & Identity",
+   "route": "/sign-up",
+   "archetype": "auth",
+   "phase": "MVP",
+   "who": "Unauthenticated",
+   "purpose": "Self-service signup with email and password.",
+   "loads": "",
+   "states": "",
+   "notes": "Pass `application_id` through when signup started from an app's link; it is recorded as signup_application_id. Every new User starts on the Free plan and receives platform-managed `free` Entitlements to every free Application, including the Hub itself (`app_hub`). No plan choice at signup; upgrading is BIL-01.",
+   "entry_points": "AUTH-01 link; Marketing/app deep link with optional `application_id`",
+   "container": "Separate `AdwWindow` with `AdwClamp`",
+   "elements": [
+    {
+     "name": "Display name",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "body.display_name",
+     "rules": "optional; ≤ 100"
+    },
+    {
+     "name": "Email",
+     "kind": "email-field",
+     "control": "AdwEntryRow input-purpose=email",
+     "data": "body.email",
+     "rules": "required"
+    },
+    {
+     "name": "Password",
+     "kind": "password-field",
+     "control": "AdwPasswordEntryRow",
+     "data": "body.password",
+     "rules": "required; strength meter; autofill new-password; show policy hint"
+    },
+    {
+     "name": "Create account",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "POST /auth/signup",
+     "rules": ""
+    },
+    {
+     "name": "Terms / Privacy",
+     "kind": "links",
+     "control": "GtkLinkButton",
+     "data": "external",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Create account",
+     "call": "POST /auth/signup",
+     "result": "201 AuthSession → AUTH-04 (verify pending) then APP-01. 409 email_taken → \"An account with this email may already exist. Sign in or reset your password.\" (with details.reason invitation_pending the API re-sends the invitation: say \"Check your email for your invitation.\") 422 → field errors."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "AUTH-04",
+   "title": "Verify your email",
+   "section_heading": "D1 · Sign-in & Identity",
+   "domain": "D1 Sign-in & Identity",
+   "route": "/verify-email",
+   "archetype": "auth",
+   "phase": "MVP",
+   "who": "Signed in (unverified) or token holder",
+   "purpose": "Tell the user to check email; complete verification from the emailed link.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "After signup; Persistent banner on APP-01 while `email_verified` is false; Deep link `/verify-email?token=…`",
+   "container": "Separate `AdwWindow` with `AdwClamp`",
+   "elements": [
+    {
+     "name": "Instruction",
+     "kind": "text",
+     "control": "GtkLabel",
+     "data": "User.email",
+     "rules": "\"We sent a link to {email}.\""
+    },
+    {
+     "name": "Resend email",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "POST /auth/email/verify/resend",
+     "rules": "30 s cooldown after each send"
+    },
+    {
+     "name": "Continue to Substratal",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "→ APP-01",
+     "rules": "unverified users may continue"
+    },
+    {
+     "name": "Change email",
+     "kind": "link",
+     "control": "GtkButton .flat / GtkLinkButton",
+     "data": "→ ACC-02",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Deep link opened",
+     "call": "POST /auth/email/verify {token}",
+     "result": "204 → success state, refresh User. 400 → \"This link has expired.\" + Resend."
+    },
+    {
+     "action": "Resend email",
+     "call": "POST /auth/email/verify/resend",
+     "result": "Always 202 → toast \"If that address needs verifying, we sent a new link.\""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "AUTH-05",
+   "title": "Forgot password",
+   "section_heading": "D1 · Sign-in & Identity",
+   "domain": "D1 Sign-in & Identity",
+   "route": "/forgot-password",
+   "archetype": "auth",
+   "phase": "MVP",
+   "who": "Unauthenticated",
+   "purpose": "Request a password-reset email.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "Separate `AdwWindow` with `AdwClamp`",
+   "elements": [
+    {
+     "name": "Email",
+     "kind": "email-field",
+     "control": "AdwEntryRow input-purpose=email",
+     "data": "body.email",
+     "rules": "prefilled from AUTH-01"
+    },
+    {
+     "name": "Send reset link",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "POST /auth/password/forgot",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Send reset link",
+     "call": "POST /auth/password/forgot",
+     "result": "Always 202 → confirmation \"If an account exists for {email}, we sent a reset link.\" 429 → countdown."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "AUTH-06",
+   "title": "Set a new password",
+   "section_heading": "D1 · Sign-in & Identity",
+   "domain": "D1 Sign-in & Identity",
+   "route": "/reset-password",
+   "archetype": "auth",
+   "phase": "MVP",
+   "who": "Reset-token holder",
+   "purpose": "Choose a new password from the emailed reset link.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "Deep link `/reset-password?token=…`",
+   "container": "Separate `AdwWindow` with `AdwClamp`",
+   "elements": [
+    {
+     "name": "New password",
+     "kind": "password-field",
+     "control": "AdwPasswordEntryRow",
+     "data": "body.new_password",
+     "rules": "strength meter; autofill new-password"
+    },
+    {
+     "name": "Confirm password",
+     "kind": "password-field",
+     "control": "AdwPasswordEntryRow",
+     "data": "client only",
+     "rules": "must match"
+    },
+    {
+     "name": "Notice",
+     "kind": "caption",
+     "control": "GtkLabel .caption .dim-label",
+     "data": "",
+     "rules": "\"You'll be signed out on all devices.\""
+    },
+    {
+     "name": "Save password",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "POST /auth/password/reset",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save password",
+     "call": "POST /auth/password/reset",
+     "result": "204 → clear local session → AUTH-01 with success banner. 400 → expired link + link to AUTH-05. 422 → field errors."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "AUTH-07",
+   "title": "Accept invitation",
+   "section_heading": "D1 · Sign-in & Identity",
+   "domain": "D1 Sign-in & Identity",
+   "route": "/invite",
+   "archetype": "auth",
+   "phase": "MVP",
+   "who": "Invitation-token holder",
+   "purpose": "Activate an account an admin created: set password and sign in.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "Deep link `/invite?token=…` from the invitation email",
+   "container": "Separate `AdwWindow` with `AdwClamp`",
+   "elements": [
+    {
+     "name": "Display name",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "body.display_name",
+     "rules": "optional"
+    },
+    {
+     "name": "Password",
+     "kind": "password-field",
+     "control": "AdwPasswordEntryRow",
+     "data": "body.password",
+     "rules": "strength meter"
+    },
+    {
+     "name": "Accept and continue",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "POST /auth/invitations/accept",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Accept and continue",
+     "call": "POST /auth/invitations/accept",
+     "result": "200 AuthSession → APP-01. 400 → \"This invitation is no longer valid. Ask your admin to resend it.\""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACC-01",
+   "title": "Account & profile",
+   "section_heading": "D2 · Account & Security",
+   "domain": "D2 Account & Security",
+   "route": "/account",
+   "archetype": "settings",
+   "phase": "MVP",
+   "who": "Self",
+   "purpose": "View and edit the signed-in user's global profile.",
+   "loads": "`GET /users/me` · `GET /users/me/profile`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "*The API stores `avatar_url` only. Upload target is a client-side decision (spec gap — see OPEN-QUESTIONS).",
+   "entry_points": "",
+   "container": "`AdwPreferencesPage`",
+   "elements": [
+    {
+     "name": "Avatar",
+     "kind": "image-picker",
+     "control": "GtkFileDialog (portal)",
+     "data": "Profile.avatar_url",
+     "rules": "camera / photo library / file / paste; client uploads to app asset storage then PATCHes URL*"
+    },
+    {
+     "name": "Display name",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "Profile.display_name",
+     "rules": "required; ≤ 100; save on blur/Return"
+    },
+    {
+     "name": "Email",
+     "kind": "row → ACC-02",
+     "control": "AdwActionRow activatable",
+     "data": "User.email + email_verified + pending_email",
+     "rules": "shows \"Pending: {pending_email}\" when set"
+    },
+    {
+     "name": "User ID",
+     "kind": "id-chip",
+     "control": "GtkLabel .monospace + copy",
+     "data": "User.id",
+     "rules": "copy"
+    },
+    {
+     "name": "Contact email",
+     "kind": "email-field",
+     "control": "AdwEntryRow input-purpose=email",
+     "data": "Profile.contact_email",
+     "rules": "optional"
+    },
+    {
+     "name": "Contact phone",
+     "kind": "phone-field",
+     "control": "AdwEntryRow input-purpose=phone",
+     "data": "Profile.contact_phone",
+     "rules": "optional; E.164 formatting by locale"
+    },
+    {
+     "name": "Plan",
+     "kind": "row → BIL-01",
+     "control": "AdwActionRow activatable",
+     "data": "User.plan free\\",
+     "rules": "standard + plan_sources"
+    },
+    {
+     "name": "Member since / last sign-in",
+     "kind": "caption",
+     "control": "GtkLabel .caption .dim-label",
+     "data": "User.created_at, last_login_at",
+     "rules": "locale formatted"
+    },
+    {
+     "name": "Sign out",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "POST /auth/logout",
+     "rules": "always visible at the bottom of Account (mobile) / account menu (desktop)"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Edit field",
+     "call": "PATCH /users/me/profile (If-Match)",
+     "result": "Save per field; 409 version_conflict → reload prompt; 422 → field error."
+    },
+    {
+     "action": "Sign out",
+     "call": "POST /auth/logout",
+     "result": "best effort; always wipe local credentials and cache → AUTH-01"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACC-02",
+   "title": "Change email",
+   "section_heading": "D2 · Account & Security",
+   "domain": "D2 Account & Security",
+   "route": "/account/email",
+   "archetype": "form",
+   "phase": "MVP",
+   "who": "Self",
+   "purpose": "Start an email change; the new address must be verified.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "New email",
+     "kind": "email-field",
+     "control": "AdwEntryRow input-purpose=email",
+     "data": "body.email",
+     "rules": "required; differs from current"
+    },
+    {
+     "name": "Save",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "PATCH /users/me",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save",
+     "call": "PATCH /users/me {email}",
+     "result": "200 → User.pending_email set; show AUTH-04-style \"check your new inbox\". 409 not_unique → \"That email is already in use.\""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACC-03",
+   "title": "Change password",
+   "section_heading": "D2 · Account & Security",
+   "domain": "D2 Account & Security",
+   "route": "/account/security/password",
+   "archetype": "form",
+   "phase": "MVP",
+   "who": "Self",
+   "purpose": "Change password knowing the current one.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "Current password",
+     "kind": "password-field",
+     "control": "AdwPasswordEntryRow",
+     "data": "body.current_password",
+     "rules": "autofill current-password"
+    },
+    {
+     "name": "New password",
+     "kind": "password-field",
+     "control": "AdwPasswordEntryRow",
+     "data": "body.new_password",
+     "rules": "strength meter; autofill new-password"
+    },
+    {
+     "name": "Save",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "POST /users/me/password",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save",
+     "call": "POST /users/me/password",
+     "result": "204 → toast \"Password changed\". 401 → \"Current password is incorrect.\" 422 → policy errors."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACC-04",
+   "title": "Security",
+   "section_heading": "D2 · Account & Security",
+   "domain": "D2 Account & Security",
+   "route": "/account/security",
+   "archetype": "settings",
+   "phase": "MVP",
+   "who": "Self",
+   "purpose": "Password, two-factor and active sessions in one place.",
+   "loads": "`GET /users/me` · `GET /users/me/sessions`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "*IP → city lookup is client-side/optional; never show the raw IP to non-staff unless the user expands details.",
+   "entry_points": "",
+   "container": "`AdwPreferencesPage`",
+   "elements": [
+    {
+     "name": "Password",
+     "kind": "row → ACC-03",
+     "control": "AdwActionRow activatable",
+     "data": "",
+     "rules": "\"Change…\""
+    },
+    {
+     "name": "Two-factor authentication",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "User.mfa_enabled",
+     "rules": "on → ACC-05; off → ACC-06"
+    },
+    {
+     "name": "Sessions",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Session[]: user_agent → device name/icon, ip_address → approximate location*, last_seen_at, current",
+     "rules": "current session marked \"This device\" and not revocable here"
+    },
+    {
+     "name": "Sign out",
+     "kind": "row-button",
+     "control": "suffix GtkButton .flat",
+     "data": "DELETE /users/me/sessions/{sessionId}",
+     "rules": "per non-current row"
+    },
+    {
+     "name": "Sign out of all other sessions",
+     "kind": "destructive-button",
+     "control": "GtkButton .destructive-action",
+     "data": "POST /users/me/sessions/revoke-all {keep_current: true}",
+     "rules": "confirm first; also stops push to those sessions' devices"
+    },
+    {
+     "name": "Devices & notifications",
+     "kind": "row → NTF-03",
+     "control": "AdwActionRow activatable",
+     "data": "count of active devices",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Revoke one",
+     "call": "DELETE /users/me/sessions/{sessionId}",
+     "result": "Optimistic remove; 404 → already gone, refresh."
+    },
+    {
+     "action": "Sign out everywhere else",
+     "call": "POST /users/me/sessions/revoke-all {keep_current: true}",
+     "result": "Confirm first (COPY). `keep_current` keeps this device signed in (`logout all_sessions` would sign it out too). 200 `{revoked}` → toast \"Signed out of {n} other sessions\", refresh the list. Revoking a session deactivates the push devices it registered."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACC-05",
+   "title": "Turn on two-factor",
+   "section_heading": "D2 · Account & Security",
+   "domain": "D2 Account & Security",
+   "route": "/account/security/2fa/enable",
+   "archetype": "wizard",
+   "phase": "MVP",
+   "who": "Self",
+   "purpose": "Enroll an authenticator app (TOTP) and save recovery codes.",
+   "loads": "",
+   "states": "Cancel before confirm leaves MFA off (no server cleanup needed)",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwNavigationView` pages",
+   "elements": [
+    {
+     "name": "Step 1 — Scan",
+     "kind": "qr + secret",
+     "control": "GtkPicture",
+     "data": "POST /users/me/mfa/totp → otpauth_uri, secret",
+     "rules": "QR, \"Copy setup key\", \"Open in authenticator\" (otpauth:// link on mobile)"
+    },
+    {
+     "name": "Step 2 — Confirm",
+     "kind": "otp-field",
+     "control": "AdwEntryRow input-purpose=digits",
+     "data": "body.code",
+     "rules": "6 digits"
+    },
+    {
+     "name": "Step 3 — Recovery codes",
+     "kind": "secret-list",
+     "control": "SecretReveal + GtkFileDialog/print",
+     "data": "confirm response: 10 recovery codes",
+     "rules": "Copy all · Save as file · Print · Share (mobile); \"I've saved these\" checkbox gates Done"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Start",
+     "call": "POST /users/me/mfa/totp",
+     "result": "409 → already enabled; close."
+    },
+    {
+     "action": "Confirm",
+     "call": "POST /users/me/mfa/totp/confirm",
+     "result": "200 → step 3. 401 → wrong code."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACC-06",
+   "title": "Turn off two-factor",
+   "section_heading": "D2 · Account & Security",
+   "domain": "D2 Account & Security",
+   "route": "/account/security/2fa/disable",
+   "archetype": "confirm",
+   "phase": "MVP",
+   "who": "Self",
+   "purpose": "Disable TOTP with a current code or a recovery code.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwAlertDialog` (`extra-child` for fields)",
+   "elements": [
+    {
+     "name": "Code or recovery code",
+     "kind": "otp-field / text-field",
+     "control": "AdwEntryRow input-purpose=digits",
+     "data": "body.code \\",
+     "rules": "body.recovery_code"
+    },
+    {
+     "name": "Turn off",
+     "kind": "destructive-button",
+     "control": "GtkButton .destructive-action",
+     "data": "POST /users/me/mfa/totp/disable",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Turn off",
+     "call": "POST /users/me/mfa/totp/disable",
+     "result": "204 → toggle off, toast. 401 → wrong code. 429 → countdown."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACC-07",
+   "title": "Privacy",
+   "section_heading": "D2 · Account & Security",
+   "domain": "D2 Account & Security",
+   "route": "/account/privacy",
+   "archetype": "settings",
+   "phase": "MVP",
+   "who": "Self",
+   "purpose": "Export personal data and delete the account.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwPreferencesPage`",
+   "elements": [
+    {
+     "name": "Download my data",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "GET /users/me/export",
+     "rules": "saves `substratal-export-{date}.json` via save dialog / share sheet / download"
+    },
+    {
+     "name": "Delete account",
+     "kind": "destructive-row → ACC-08",
+     "control": "AdwButtonRow .destructive-action",
+     "data": "",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Download",
+     "call": "GET /users/me/export",
+     "result": "200 → save file. 429 → \"You can export again in {n} minutes.\""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACC-08",
+   "title": "Delete account",
+   "section_heading": "D2 · Account & Security",
+   "domain": "D2 Account & Security",
+   "route": "/account/privacy/delete",
+   "archetype": "confirm",
+   "phase": "MVP",
+   "who": "Self",
+   "purpose": "Request erasure: deactivate now, erase after 7 days.",
+   "loads": "",
+   "states": "",
+   "notes": "If the User has an individual Standard subscription, warn first and link to \"Manage billing\" (BIL-03) — erasure doesn't cancel Stripe billing by itself (see OPEN-QUESTIONS).",
+   "entry_points": "",
+   "container": "`AdwAlertDialog` (`extra-child` for fields)",
+   "elements": [
+    {
+     "name": "What happens",
+     "kind": "text",
+     "control": "GtkLabel",
+     "data": "",
+     "rules": "list: signed out everywhere; apps lose access; erased on {date}; support can cancel within 7 days"
+    },
+    {
+     "name": "Reason",
+     "kind": "text-area",
+     "control": "GtkTextView in .card",
+     "data": "body.reason",
+     "rules": "optional"
+    },
+    {
+     "name": "Type DELETE",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "client only",
+     "rules": "must equal localized confirm word"
+    },
+    {
+     "name": "Delete account",
+     "kind": "destructive-button",
+     "control": "GtkButton .destructive-action",
+     "data": "POST /users/me/erasure-requests",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Delete account",
+     "call": "POST /users/me/erasure-requests",
+     "result": "202 ErasureRequest → clear local data → AUTH-01 with \"Your account is scheduled for deletion on {scheduled_for}.\""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APP-01",
+   "title": "Home — My Apps",
+   "section_heading": "D3 · My Apps",
+   "domain": "D3 My Apps",
+   "route": "/",
+   "archetype": "grid",
+   "phase": "MVP",
+   "who": "Signed in",
+   "purpose": "See every app you can use, its access status, and launch it.",
+   "loads": "`GET /applications (catalog the caller can see; each has access_tier free|standard)` · `GET /users/me/entitlements?include_inactive=true` · `GET /users/me (plan, plan_sources)` · `GET /organizations?status=active (for pending invites)` · `GET /users/me/notifications/unread-count (bell badge)`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES; Empty: \"No apps yet\" (COPY); Offline: show cached grid read-only, launch disabled",
+   "notes": "Resolved status per app: if any path active → Active; else precedence scheduled > disabled > expired > revoked > none (matches the API's resolved_entitlement_status). Use `GET /users/me/apps/{appId}/effective-permissions` for the authoritative answer when the user opens APP-02. Tile helper text by source of the active path: `free` → \"Free\"; `subscription` → \"Standard\" (or \"Standard · via {org}\"); developer grants as before. The Hub itself (`app_hub`) is hidden from the grid.",
+   "entry_points": "",
+   "container": "Content page, `GtkFlowBox` in `AdwClamp`",
+   "elements": [
+    {
+     "name": "Search",
+     "kind": "search",
+     "control": "GtkSearchEntry",
+     "data": "client filter on name/description",
+     "rules": ""
+    },
+    {
+     "name": "Grid / List",
+     "kind": "segmented",
+     "control": "linked GtkToggleButtons",
+     "data": "client preference",
+     "rules": "persisted locally"
+    },
+    {
+     "name": "Invitation banner",
+     "kind": "banner",
+     "control": "AdwBanner",
+     "data": "Organization.my_membership_status = pending",
+     "rules": "\"{org} invited you…\" → ORG-09"
+    },
+    {
+     "name": "Verify-email banner",
+     "kind": "banner",
+     "control": "AdwBanner",
+     "data": "User.email_verified = false",
+     "rules": "→ AUTH-04"
+    },
+    {
+     "name": "Your apps",
+     "kind": "tile-grid",
+     "control": "GtkFlowBox .card children",
+     "data": "join Application × resolved entitlement per app",
+     "rules": "tile = icon, name, StatusBadge, helper text (COPY); order: recently launched, then A–Z; pin to top (local)"
+    },
+    {
+     "name": "Included with Standard",
+     "kind": "tile-grid",
+     "control": "GtkFlowBox .card children",
+     "data": "standard apps with status none while User.plan = free",
+     "rules": "badge \"Standard\"; tap → upsell sheet → BIL-01 (\"Get every app for $6/month\")"
+    },
+    {
+     "name": "Available",
+     "kind": "tile-grid",
+     "control": "GtkFlowBox .card children",
+     "data": "other public apps with status none",
+     "rules": "\"Get access\" → app support/launch page"
+    },
+    {
+     "name": "Inbox bell",
+     "kind": "toolbar button + count",
+     "control": "AdwHeaderBar buttons",
+     "data": "NotificationUnreadCount.unread_count",
+     "rules": "→ NTF-01"
+    },
+    {
+     "name": "Past apps",
+     "kind": "row → APP-05",
+     "control": "AdwActionRow activatable",
+     "data": "count of revoked/expired",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Open tile (active)",
+     "call": "→ APP-03",
+     "result": "Launch"
+    },
+    {
+     "action": "Open tile (other status)",
+     "call": "→ APP-02",
+     "result": "Explain status"
+    },
+    {
+     "action": "Context menu / long-press",
+     "call": "",
+     "result": "Open · App settings (SET-02) · App profile (APP-04) · Pin · Copy app ID"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APP-02",
+   "title": "App info",
+   "section_heading": "D3 · My Apps",
+   "domain": "D3 My Apps",
+   "route": "/apps/:appId",
+   "archetype": "popover",
+   "phase": "MVP",
+   "who": "Signed in",
+   "purpose": "Explain an app's access status and how the user has access.",
+   "loads": "`GET /applications/{appId}` · `GET /users/me/apps/{appId}/effective-permissions`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`GtkPopover` or `AdwOverlaySplitView` sidebar",
+   "elements": [
+    {
+     "name": "Header",
+     "kind": "icon + name + StatusBadge",
+     "control": "GtkImage + labels + badge",
+     "data": "Application, EffectivePermissions.entitlement_status",
+     "rules": ""
+    },
+    {
+     "name": "Description",
+     "kind": "text",
+     "control": "GtkLabel",
+     "data": "Application.description",
+     "rules": ""
+    },
+    {
+     "name": "Access paths",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "EffectivePermissions.access_paths[]: source, status, organization_id, member_decision",
+     "rules": "\"Free\", \"Standard · your subscription\", \"Standard · via Northwind\", \"Personal · Granted by admin\", \"Via Northwind (seat)\"; member_decision excluded explained"
+    },
+    {
+     "name": "Tier",
+     "kind": "badge",
+     "control": "StatusBadge (.status-badge box)",
+     "data": "Application.access_tier",
+     "rules": "\"Free\" or \"Standard\""
+    },
+    {
+     "name": "Your roles",
+     "kind": "chips",
+     "control": "GtkToggleButton pills",
+     "data": "EffectivePermissions.roles",
+     "rules": "Phase 2"
+    },
+    {
+     "name": "Primary action",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "",
+     "rules": "Active → Open; none + standard tier + plan free → Upgrade to Standard (BIL-01); none+public → Get access; disabled/expired/revoked → Contact support (support_url)"
+    },
+    {
+     "name": "Notification settings",
+     "kind": "row → SET-02",
+     "control": "AdwActionRow activatable",
+     "data": "resolved notifications.push for this app",
+     "rules": "\"Push notifications: On/Off\""
+    },
+    {
+     "name": "App settings / App profile",
+     "kind": "rows",
+     "control": "AdwActionRows",
+     "data": "→ SET-02, APP-04",
+     "rules": "only when active"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APP-03",
+   "title": "Launch app",
+   "section_heading": "D3 · My Apps",
+   "domain": "D3 My Apps",
+   "route": "/apps/:appId/launch",
+   "archetype": "handoff",
+   "phase": "MVP",
+   "who": "Active entitlement",
+   "purpose": "Mint an app token (or authorization code) and open the app.",
+   "loads": "",
+   "states": "",
+   "notes": "Record launch time locally for \"recently launched\" ordering.",
+   "entry_points": "",
+   "container": "`GtkUriLauncher` (OpenURI portal)",
+   "elements": [
+    {
+     "name": "Progress",
+     "kind": "inline spinner on tile",
+     "control": "GtkSpinner on tile",
+     "data": "",
+     "rules": "≤ 1 s target"
+    },
+    {
+     "name": "Organization picker",
+     "kind": "menu",
+     "control": "GtkMenuButton",
+     "data": "body.organization_id",
+     "rules": "only when the user has access via >1 org and the app needs org context"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Embedded launch",
+     "call": "POST /auth/app-tokens {application_id, organization_id?}",
+     "result": "200 AppToken (5-min JWT) → open launch_url with token per app contract; never cache the token. 403 → refresh status, show APP-02; `embedded_login_not_allowed` (a third-party, self-registered app) → hosted launch below, or open `launch_url` without a token while `hosted_launch` is off. 409 → choose org."
+    },
+    {
+     "action": "Hosted launch (Phase 3)",
+     "call": "POST /auth/oauth/authorization-codes (PKCE S256)",
+     "result": "201 → open redirect_uri?code=…&state=… in system browser / auth session"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APP-04",
+   "title": "App profile",
+   "section_heading": "D3 · My Apps",
+   "domain": "D3 My Apps",
+   "route": "/apps/:appId/profile",
+   "archetype": "form",
+   "phase": "Phase 2",
+   "who": "Self, active entitlement",
+   "purpose": "Per-app display handle and custom profile fields.",
+   "loads": "`GET /users/me/apps/{appId}/profile`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "Display handle",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "AppProfile.display_handle",
+     "rules": "optional; shows effective_display_name as placeholder"
+    },
+    {
+     "name": "Custom fields",
+     "kind": "key/value editor",
+     "control": "AdwPreferencesGroup of AdwEntryRow pairs",
+     "data": "AppProfile.custom",
+     "rules": "only keys the app documents; null removes a key"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save",
+     "call": "PATCH /users/me/apps/{appId}/profile (If-Match)",
+     "result": ""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APP-05",
+   "title": "Past apps",
+   "section_heading": "D3 · My Apps",
+   "domain": "D3 My Apps",
+   "route": "/apps/past",
+   "archetype": "list",
+   "phase": "MVP",
+   "who": "Signed in",
+   "purpose": "Apps whose access was revoked or expired.",
+   "loads": "`GET /users/me/entitlements?include_inactive=true&status=revoked,expired`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Nested `AdwNavigationSplitView` list pane",
+   "elements": [
+    {
+     "name": "Rows",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Application name/icon, status, ended/revoked date, source",
+     "rules": "tap → APP-02"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "SET-01",
+   "title": "Settings — Global",
+   "section_heading": "D4 · Settings",
+   "domain": "D4 Settings",
+   "route": "/settings",
+   "archetype": "settings",
+   "phase": "MVP",
+   "who": "Self",
+   "purpose": "Preferences that apply to every app.",
+   "loads": "`GET /users/me/settings` · `GET /users/me/apps/app_hub/settings` (theme choices)",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwPreferencesPage`",
+   "elements": [
+    {
+     "name": "Language",
+     "kind": "select",
+     "control": "AdwComboRow",
+     "data": "Settings.locale",
+     "rules": "BCP 47; default = OS language; changing re-localizes the UI live"
+    },
+    {
+     "name": "Time zone",
+     "kind": "searchable select",
+     "control": "AdwComboRow enable-search",
+     "data": "Settings.timezone",
+     "rules": "IANA; default = OS zone; \"Use device time zone\" option"
+    },
+    {
+     "name": "Appearance",
+     "kind": "segmented",
+     "control": "linked GtkToggleButtons",
+     "data": "Settings.theme light/dark/system",
+     "rules": "Light · Dark · Match system (default). Applies instantly; Match system follows OS changes live. See THEMES.md"
+    },
+    {
+     "name": "Light theme",
+     "kind": "swatch picker",
+     "control": "GtkFlowBox of swatch GtkCheckButtons (grouped) in an AdwPreferencesGroup",
+     "data": "`app_hub` setting `appearance.light_theme`",
+     "rules": "5 themes: Teal Ledger, Indigo Root, **Moss Paper (default)**, Coral Clay, Spore Pink. Each swatch previews background, sidebar, accent and text; selected swatch shows a check and accent ring; accessible name \"{name} light theme, selected\""
+    },
+    {
+     "name": "Dark theme",
+     "kind": "swatch picker",
+     "control": "GtkFlowBox of swatch GtkCheckButtons (grouped) in an AdwPreferencesGroup",
+     "data": "`app_hub` setting `appearance.dark_theme`",
+     "rules": "5 themes: Night Soil, Deep Teal, Graphite Spore, **Forest Floor (default)**, Ember Clay. Same behaviour as Light theme"
+    },
+    {
+     "name": "Push notifications",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "Settings.notifications.push (missing = on)",
+     "rules": "global master switch for push from every app; inbox still fills (NTF-01). Shows OS permission state beneath: \"Allowed in system settings\" / \"Blocked — Open system settings\""
+    },
+    {
+     "name": "Email notifications",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "Settings.notifications.email",
+     "rules": ""
+    },
+    {
+     "name": "SMS notifications",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "Settings.notifications.sms",
+     "rules": "disabled until Profile.contact_phone set"
+    },
+    {
+     "name": "Share usage analytics",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "client preference",
+     "rules": "default per platform policy; see CLIENT-ARCHITECTURE §10"
+    },
+    {
+     "name": "Scope list",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Global + each app with active access",
+     "rules": "→ SET-02 (desktop: middle column)"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Change any row",
+     "call": "PATCH /users/me/settings (If-Match)",
+     "result": "Optimistic; revert + toast on error."
+    },
+    {
+     "action": "Choose a light or dark theme",
+     "call": "PATCH /users/me/apps/app_hub/settings (If-Match)` with `appearance.light_theme` / `appearance.dark_theme",
+     "result": "Apply instantly, cache locally, then sync; 409 → refetch and re-apply; 422 → revert + toast \"Couldn't save your theme. Try again.\""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "SET-02",
+   "title": "Settings — Per app",
+   "section_heading": "D4 · Settings",
+   "domain": "D4 Settings",
+   "route": "/settings/apps/:appId",
+   "archetype": "settings",
+   "phase": "Phase 2",
+   "who": "Self, active entitlement",
+   "purpose": "Override global settings and set app-specific preferences from the app's settings_schema.",
+   "loads": "`GET /applications/{appId} (settings_schema)` · `GET /users/me/apps/{appId}/settings`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwPreferencesPage`",
+   "elements": [
+    {
+     "name": "Schema form",
+     "kind": "generated rows",
+     "control": "SchemaForm",
+     "data": "settings_schema properties × AppSettingsResolved.resolved",
+     "rules": "string+enum → select; string → text; string date-time → date-time picker; boolean → toggle; integer/number with min/max → stepper/number; object/array → read-only JSON preview"
+    },
+    {
+     "name": "Source caption",
+     "kind": "caption per row",
+     "control": "GtkLabel .caption .dim-label",
+     "data": "AppSettingsResolved.sources[key]",
+     "rules": "app_override → \"Changed for this app · Reset\"; global → \"Using your global setting\"; app_default → \"App default\""
+    },
+    {
+     "name": "Reset",
+     "kind": "link per overridden row",
+     "control": "AdwActionRow activatable",
+     "data": "PATCH overrides {key:null}",
+     "rules": ""
+    },
+    {
+     "name": "Push notifications for this app",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "resolved notifications.push; override via overrides.notifications.push",
+     "rules": "source caption as other rows; Reset clears the override"
+    },
+    {
+     "name": "Stale overrides",
+     "kind": "banner",
+     "control": "AdwBanner",
+     "data": "AppSettingsResolved.stale_overrides",
+     "rules": "\"Some saved settings no longer apply\" → Clear"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Change row",
+     "call": "PATCH /users/me/apps/{appId}/settings {overrides:{key:value}} (If-Match)",
+     "result": "422 → field error from details (enum_mismatch, out_of_range, undeclared_key)."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ORG-01",
+   "title": "Organizations",
+   "section_heading": "D5 · Organizations",
+   "domain": "D5 Organizations",
+   "route": "/orgs",
+   "archetype": "list",
+   "phase": "MVP",
+   "who": "Signed in (all orgs with organizations.manage)",
+   "purpose": "Organizations you belong to, plus pending invitations.",
+   "loads": "`GET /organizations`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Nested `AdwNavigationSplitView` list pane",
+   "elements": [
+    {
+     "name": "Pending invitations",
+     "kind": "section",
+     "control": "AdwPreferencesGroup",
+     "data": "my_membership_status = pending",
+     "rules": "Accept / Decline inline → ORG-09"
+    },
+    {
+     "name": "Rows",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Organization: name, member_count, my_role, status",
+     "rules": "suspended orgs show badge"
+    },
+    {
+     "name": "Search",
+     "kind": "search",
+     "control": "GtkSearchEntry",
+     "data": "q",
+     "rules": "server-side when > 50"
+    },
+    {
+     "name": "New organization",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "→ ORG-02",
+     "rules": ""
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ORG-02",
+   "title": "New organization",
+   "section_heading": "D5 · Organizations",
+   "domain": "D5 Organizations",
+   "route": "/orgs/new",
+   "archetype": "form",
+   "phase": "MVP",
+   "who": "Any active user",
+   "purpose": "Create an organization; creator becomes org admin.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "Name",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "body.name",
+     "rules": "required; ≤ 100"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Create",
+     "call": "POST /organizations (Idempotency-Key)",
+     "result": "201 → ORG-03. 429 → rate limited."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ORG-03",
+   "title": "Organization — Members",
+   "section_heading": "D5 · Organizations",
+   "domain": "D5 Organizations",
+   "route": "/orgs/:orgId/members",
+   "archetype": "detail",
+   "phase": "MVP",
+   "who": "Member (read), org_admin / organizations.manage (write)",
+   "purpose": "See and manage members and pending invitations.",
+   "loads": "`GET /organizations/{id}` · `GET /organizations/{id}/members`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Content pane; `AdwViewSwitcher`; header-bar actions",
+   "elements": [
+    {
+     "name": "Header",
+     "kind": "avatar + name + id-chip + status",
+     "control": "GtkLabel .monospace + copy",
+     "data": "Organization",
+     "rules": "my_role shown as caption"
+    },
+    {
+     "name": "Tabs",
+     "kind": "tabs",
+     "control": "AdwViewSwitcher / AdwInlineViewSwitcher",
+     "data": "Members · Apps & seats · Subscription · Activity · Settings",
+     "rules": "Subscription tab = BIL-02 (org_admin / billing.manage only)"
+    },
+    {
+     "name": "Filter",
+     "kind": "chips",
+     "control": "GtkToggleButton pills",
+     "data": "role, membership_status",
+     "rules": ""
+    },
+    {
+     "name": "Rows",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "OrganizationMember: display_name/email, role, membership_status, joined_at/invited_at",
+     "rules": "pending rows show Invited badge + invited date"
+    },
+    {
+     "name": "Invite",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "→ ORG-04",
+     "rules": "org_admin only"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Row menu",
+     "call": "→ ORG-05",
+     "result": "Change role · Remove · Withdraw invitation"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ORG-04",
+   "title": "Invite member",
+   "section_heading": "D5 · Organizations",
+   "domain": "D5 Organizations",
+   "route": "/orgs/:orgId/members/invite",
+   "archetype": "form",
+   "phase": "MVP",
+   "who": "org_admin; organizations.manage may add by user_id",
+   "purpose": "Invite people by email (or add an existing user, staff only).",
+   "loads": "",
+   "states": "",
+   "notes": "Existing Users also receive an `account.organization_invitation` platform alert (NTF-01, and a push where the Hub has a device).",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "Emails",
+     "kind": "token-field",
+     "control": "custom entry with pills",
+     "data": "body.email (one request per address)",
+     "rules": "paste a list separated by commas/newlines"
+    },
+    {
+     "name": "Role",
+     "kind": "radio-group",
+     "control": "GtkCheckButton group",
+     "data": "body.role org_admin \\",
+     "rules": "member"
+    },
+    {
+     "name": "Add existing user",
+     "kind": "user-picker",
+     "control": "AdwDialog with GtkSearchEntry list",
+     "data": "body.user_id",
+     "rules": "organizations.manage only"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Send invitations",
+     "call": "POST /organizations/{id}/members × n",
+     "result": "Per-address results summary; 409 → \"already a member\" per address. Responses look identical whether or not the address has an account (by design)."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ORG-05",
+   "title": "Member actions",
+   "section_heading": "D5 · Organizations",
+   "domain": "D5 Organizations",
+   "route": "/orgs/:orgId/members/:userId",
+   "archetype": "confirm",
+   "phase": "MVP",
+   "who": "org_admin / organizations.manage",
+   "purpose": "Change a member's role or remove them.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwAlertDialog` (`extra-child` for fields)",
+   "elements": [
+    {
+     "name": "Role",
+     "kind": "radio-group",
+     "control": "GtkCheckButton group",
+     "data": "body.role",
+     "rules": ""
+    },
+    {
+     "name": "Remove from organization",
+     "kind": "destructive-button",
+     "control": "GtkButton .destructive-action",
+     "data": "DELETE …/members/{userId}",
+     "rules": "COPY confirm"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Change role",
+     "call": "PATCH /organizations/{id}/members/{userId}",
+     "result": "409 → last admin can't be demoted (explain)."
+    },
+    {
+     "action": "Remove",
+     "call": "DELETE /organizations/{id}/members/{userId}",
+     "result": "409 → last admin can't leave/remove."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ORG-06",
+   "title": "Organization — Apps & seats",
+   "section_heading": "D5 · Organizations",
+   "domain": "D5 Organizations",
+   "route": "/orgs/:orgId/apps",
+   "archetype": "tab",
+   "phase": "Phase 2",
+   "who": "Member (read), org_admin (write)",
+   "purpose": "Org-wide app grants and who they include.",
+   "loads": "`GET /organizations/{id}/entitlements`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwViewStack` page",
+   "elements": [
+    {
+     "name": "Rows",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Entitlement (org): app, status, source (org_seat \\",
+     "rules": "subscription), member_scope, included_member_count, starts_at/ends_at"
+    },
+    {
+     "name": "Grant app",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "→ ORG-07",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Toggle",
+     "call": "PATCH /entitlements/{id} {status}",
+     "result": "Off requires confirm (COPY). On platform-managed rows only active ⇄ disabled is allowed; anything else 409 entitlement_platform_managed."
+    },
+    {
+     "action": "Edit scope",
+     "call": "→ ORG-07 (org_seat) / BIL-02 (subscription)",
+     "result": ""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ORG-07",
+   "title": "Grant app to organization / member scope",
+   "section_heading": "D5 · Organizations",
+   "domain": "D5 Organizations",
+   "route": "/orgs/:orgId/apps/grant",
+   "archetype": "form",
+   "phase": "Phase 2",
+   "who": "entitlements.manage or app owner; scope edits by org_admin",
+   "purpose": "Create an org-wide grant or change who it includes.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "App",
+     "kind": "select",
+     "control": "AdwComboRow",
+     "data": "body.application_id",
+     "rules": "create only"
+    },
+    {
+     "name": "Who gets access",
+     "kind": "radio-group",
+     "control": "GtkCheckButton group",
+     "data": "member_scope all_members \\",
+     "rules": "allowlist \\"
+    },
+    {
+     "name": "Members",
+     "kind": "member-picker",
+     "control": "AdwDialog with GtkSearchEntry list",
+     "data": "member_overrides",
+     "rules": "visible for allowlist/denylist"
+    },
+    {
+     "name": "Starts / Ends",
+     "kind": "date-fields",
+     "control": "GtkCalendar in popover",
+     "data": "starts_at, ends_at",
+     "rules": "optional"
+    },
+    {
+     "name": "Order ID",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "order_id",
+     "rules": "optional; staff/app owner"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Grant",
+     "call": "POST /organizations/{id}/entitlements (Idempotency-Key)",
+     "result": "409 entitlement_already_exists → already granted (view it). 422 → field errors."
+    },
+    {
+     "action": "Save scope",
+     "call": "PATCH /entitlements/{id} {member_scope, member_overrides}",
+     "result": ""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ORG-08",
+   "title": "Organization — Settings",
+   "section_heading": "D5 · Organizations",
+   "domain": "D5 Organizations",
+   "route": "/orgs/:orgId/settings",
+   "archetype": "settings",
+   "phase": "MVP",
+   "who": "org_admin (rename, SCIM), organizations.manage (suspend, SCIM), any member (leave)",
+   "purpose": "Rename, leave, set up SCIM provisioning, or (staff) suspend the organization.",
+   "loads": "",
+   "states": "",
+   "notes": "SCIM provisioning *invites* people (they join when they accept, via ORG-09) and deprovisioning removes the membership, never the account. Provisioned members show in ORG-03 like any invitation. SCIM itself (`/scim/v2`) is called by the identity provider, never by the Hub.",
+   "entry_points": "",
+   "container": "`AdwPreferencesPage`",
+   "elements": [
+    {
+     "name": "Name",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "Organization.name",
+     "rules": ""
+    },
+    {
+     "name": "Leave organization",
+     "kind": "destructive-row",
+     "control": "AdwButtonRow .destructive-action",
+     "data": "DELETE …/members/me",
+     "rules": ""
+    },
+    {
+     "name": "SCIM provisioning",
+     "kind": "section",
+     "control": "AdwPreferencesGroup",
+     "data": "GET …/scim-token → `created_at`, `created_by`, `last_used_at`, `base_url`",
+     "rules": "org_admin or organizations.manage; behind `scim` flag; 404 scim_token_not_found = \"Not set up\""
+    },
+    {
+     "name": "Set up / Rotate token",
+     "kind": "button",
+     "control": "AdwButtonRow",
+     "data": "POST …/scim-token → token + base_url",
+     "rules": "rotate confirms first (\"Your identity provider stops syncing until you paste the new token\"); secret shown once (KEY-03 pattern)"
+    },
+    {
+     "name": "Turn off SCIM",
+     "kind": "destructive-row",
+     "control": "AdwButtonRow .destructive-action",
+     "data": "DELETE …/scim-token",
+     "rules": "confirm; members already provisioned stay"
+    },
+    {
+     "name": "Suspend / Reactivate",
+     "kind": "destructive-row",
+     "control": "AdwButtonRow .destructive-action",
+     "data": "PATCH {status, reason}",
+     "rules": "staff only; reason required"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Rename",
+     "call": "PATCH /organizations/{id} {name}",
+     "result": ""
+    },
+    {
+     "action": "Leave",
+     "call": "DELETE /organizations/{id}/members/me",
+     "result": "409 last admin"
+    },
+    {
+     "action": "Load SCIM status",
+     "call": "GET /organizations/{id}/scim-token",
+     "result": "404 scim_token_not_found → \"Not set up\" with a Set up button"
+    },
+    {
+     "action": "Create / rotate SCIM token",
+     "call": "POST /organizations/{id}/scim-token",
+     "result": "201 → one-time secret sheet showing `base_url` and `token` with Copy; the previous token stops working at once"
+    },
+    {
+     "action": "Turn off SCIM",
+     "call": "DELETE /organizations/{id}/scim-token",
+     "result": "204 → \"Not set up\""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ORG-09",
+   "title": "Invitation",
+   "section_heading": "D5 · Organizations",
+   "domain": "D5 Organizations",
+   "route": "/orgs/:orgId/invitation",
+   "archetype": "confirm",
+   "phase": "MVP",
+   "who": "Invited user",
+   "purpose": "Accept or decline an organization invitation.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "Invitation banner on APP-01; ORG-01 pending section; `account.organization_invitation` notification (NTF-01 / push action \"Accept\")",
+   "container": "`AdwAlertDialog` (`extra-child` for fields)",
+   "elements": [
+    {
+     "name": "Org name + inviter",
+     "kind": "text",
+     "control": "GtkLabel",
+     "data": "Organization",
+     "rules": ""
+    },
+    {
+     "name": "Accept",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "",
+     "rules": ""
+    },
+    {
+     "name": "Decline",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Accept",
+     "call": "POST /organizations/{id}/members/me/accept",
+     "result": "200 → ORG-03; apps granted via org (and the org's Standard subscription, if it covers the member) appear on APP-01. Mark the related notification read."
+    },
+    {
+     "action": "Decline",
+     "call": "DELETE /organizations/{id}/members/me",
+     "result": ""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "USR-01",
+   "title": "Users",
+   "section_heading": "D6 · Users",
+   "domain": "D6 Users",
+   "route": "/admin/users",
+   "archetype": "table",
+   "phase": "MVP",
+   "who": "users.list (write actions need users.manage)",
+   "purpose": "Find and manage user accounts.",
+   "loads": "`GET /users?limit=50&cursor&status&q&application_id&organization_id&created_after&created_before`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`GtkColumnView` (.data-table) in a card",
+   "elements": [
+    {
+     "name": "Search",
+     "kind": "search",
+     "control": "GtkSearchEntry",
+     "data": "q (name, email, ID prefix usr_)",
+     "rules": "debounced 300 ms; exact ID jumps to USR-03"
+    },
+    {
+     "name": "Status filter",
+     "kind": "chips",
+     "control": "GtkToggleButton pills",
+     "data": "status active \\",
+     "rules": "invited \\"
+    },
+    {
+     "name": "More filters",
+     "kind": "menu",
+     "control": "GtkMenuButton",
+     "data": "application_id, organization_id, created range",
+     "rules": ""
+    },
+    {
+     "name": "Columns",
+     "kind": "table",
+     "control": "GtkColumnView .data-table",
+     "data": "display name + email, status, id, last_login_at, created_at",
+     "rules": "sortable client-side within loaded page; server order = created_at desc"
+    },
+    {
+     "name": "Multi-select",
+     "kind": "selection",
+     "control": "AdwComboRow",
+     "data": "",
+     "rules": "bulk: Suspend, Resend invitation, Export CSV (client-side of loaded rows)"
+    },
+    {
+     "name": "Invite user",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "→ USR-02",
+     "rules": "users.manage"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Open row",
+     "call": "→ USR-03",
+     "result": ""
+    },
+    {
+     "action": "Row menu",
+     "call": "",
+     "result": "Suspend · Reactivate · Resend invitation · Copy ID · Copy email"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "USR-02",
+   "title": "Invite user",
+   "section_heading": "D6 · Users",
+   "domain": "D6 Users",
+   "route": "/admin/users/new",
+   "archetype": "form",
+   "phase": "MVP",
+   "who": "users.manage",
+   "purpose": "Create a user and send an invitation (or create active).",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "Email",
+     "kind": "email-field",
+     "control": "AdwEntryRow input-purpose=email",
+     "data": "body.email",
+     "rules": "required"
+    },
+    {
+     "name": "Display name",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "body.display_name",
+     "rules": "optional"
+    },
+    {
+     "name": "Send invitation email",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "body.send_invitation",
+     "rules": "default on"
+    },
+    {
+     "name": "Create as active",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "body.status active\\",
+     "rules": "invited"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Invite",
+     "call": "POST /users (Idempotency-Key)",
+     "result": "201 → USR-03. 409 → \"A user with that email exists\" + link."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "USR-03",
+   "title": "User — Overview",
+   "section_heading": "D6 · Users",
+   "domain": "D6 Users",
+   "route": "/admin/users/:userId",
+   "archetype": "detail",
+   "phase": "MVP",
+   "who": "users.list (read), users.manage (write)",
+   "purpose": "One user's account state and administrative actions.",
+   "loads": "`GET /users/{id}` · `GET /users/{id}/profile` · `GET /users/{id}/subscription (billing.manage only)`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Content pane; `AdwViewSwitcher`; header-bar actions",
+   "elements": [
+    {
+     "name": "Header",
+     "kind": "avatar, display name, email, id-chip, StatusBadge",
+     "control": "GtkLabel .monospace + copy",
+     "data": "User + Profile",
+     "rules": ""
+    },
+    {
+     "name": "Tabs",
+     "kind": "tabs",
+     "control": "AdwViewSwitcher / AdwInlineViewSwitcher",
+     "data": "Overview · Access · Roles · Sessions · Notifications · Activity",
+     "rules": "Activity = AUD-01 filtered target_user_id; Notifications = NTF-05"
+    },
+    {
+     "name": "Facts",
+     "kind": "key-value list",
+     "control": "AdwActionRow subtitle",
+     "data": "email_verified, pending_email, mfa_enabled, plan, plan_sources, created_at, last_login_at, signup_application_id, test_mode, expires_at (test-mode Users only: \"Expires in 3 h\" / \"Expired\")",
+     "rules": "plan_sources link to the org or to BIL-01 subscription view (billing.manage)"
+    },
+    {
+     "name": "Actions",
+     "kind": "toolbar/menu",
+     "control": "GtkMenuButton",
+     "data": "",
+     "rules": "Suspend (USR-05) · Reactivate · Resend invitation · Reset two-factor · Export data · Delete · Restore · Cancel scheduled erasure"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Reactivate / Restore",
+     "call": "PATCH /users/{id} {status:active} (If-Match)",
+     "result": ""
+    },
+    {
+     "action": "Resend invitation",
+     "call": "POST /users/{id}/invitation",
+     "result": "202 toast; 409 → not in invited state"
+    },
+    {
+     "action": "Reset two-factor",
+     "call": "DELETE /users/{id}/mfa/totp",
+     "result": "confirm"
+    },
+    {
+     "action": "Export",
+     "call": "GET /users/{id}/export",
+     "result": "save file"
+    },
+    {
+     "action": "Delete",
+     "call": "DELETE /users/{id}",
+     "result": "confirm"
+    },
+    {
+     "action": "Cancel erasure",
+     "call": "DELETE /users/{id}/erasure-requests/current",
+     "result": "visible during 7-day window"
+    },
+    {
+     "action": "Extend (test-mode)",
+     "call": "PATCH /users/{id} {expires_at} (If-Match)",
+     "result": "users.manage; at least 15 min from now, at most 30 days after created_at (422 `expires_at_out_of_range`). Extending an expired User brings them back."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "USR-04",
+   "title": "User — Sessions",
+   "section_heading": "D6 · Users",
+   "domain": "D6 Users",
+   "route": "/admin/users/:userId/sessions",
+   "archetype": "tab",
+   "phase": "MVP",
+   "who": "users.manage",
+   "purpose": "See and revoke a user's sessions.",
+   "loads": "`GET /users/{id}/sessions`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwViewStack` page",
+   "elements": [
+    {
+     "name": "Rows",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Session: user_agent, ip_address, amr, created_at, last_seen_at, expires_at",
+     "rules": "staff see full IP"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Revoke",
+     "call": "DELETE /users/{id}/sessions/{sessionId}",
+     "result": ""
+    },
+    {
+     "action": "Sign out everywhere",
+     "call": "POST /users/{id}/sessions/revoke-all",
+     "result": "Confirm (COPY \"Sign out everywhere (staff)\"). 200 `{revoked}` → toast; the list empties. Their account stays active."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "USR-05",
+   "title": "Suspend user",
+   "section_heading": "D6 · Users",
+   "domain": "D6 Users",
+   "route": "/admin/users/:userId/suspend",
+   "archetype": "confirm",
+   "phase": "MVP",
+   "who": "users.manage",
+   "purpose": "Suspend an account (signs them out everywhere).",
+   "loads": "",
+   "states": "",
+   "notes": "Suspension revokes sessions and deactivates every push device the user holds; say so in the confirm body.",
+   "entry_points": "",
+   "container": "`AdwAlertDialog` (`extra-child` for fields)",
+   "elements": [
+    {
+     "name": "Reason",
+     "kind": "text-area",
+     "control": "GtkTextView in .card",
+     "data": "body.reason",
+     "rules": "optional, written to audit"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Suspend",
+     "call": "POST /users/{id}/suspend",
+     "result": "200 → badge Suspended. 409 → already suspended."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACX-01",
+   "title": "User — Access",
+   "section_heading": "D7 · Access",
+   "domain": "D7 Access",
+   "route": "/admin/users/:userId/access",
+   "archetype": "tab",
+   "phase": "MVP",
+   "who": "users.list (read), entitlements.manage or app owner (write)",
+   "purpose": "Turn apps on or off for one person; see every path that grants access.",
+   "loads": "`GET /users/{id}/entitlements?include_inactive=true` · `GET /applications`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "The switch on a platform-managed row only disables / re-enables it (the platform never re-enables a row an admin disabled). Term, source and scope edits are hidden for those rows.",
+   "entry_points": "",
+   "container": "`AdwViewStack` page",
+   "elements": [
+    {
+     "name": "Rows (one per app)",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "resolved status per app + paths (personal Entitlement, org grants)",
+     "rules": "StatusBadge + AccessSwitch on the personal path"
+    },
+    {
+     "name": "Paths disclosure",
+     "kind": "expandable",
+     "control": "AdwExpanderRow",
+     "data": "Entitlement.granted_via, source, subscription_id, organization_id, member_decision, starts_at/ends_at, disabled_reason",
+     "rules": "platform-managed paths (`free`, `subscription`) show a \"Managed by Substratal\" caption; developer grants and platform rows can coexist"
+    },
+    {
+     "name": "Org-only access",
+     "kind": "caption + link",
+     "control": "GtkLabel .caption .dim-label",
+     "data": "",
+     "rules": "switch replaced by \"Via {org}\" → ORG-06"
+    },
+    {
+     "name": "Grant access",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "→ ACX-02",
+     "rules": ""
+    },
+    {
+     "name": "Why?",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "→ ACX-04",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Switch off",
+     "call": "→ ACX-03 confirm → PATCH /entitlements/{id} {status:disabled, disabled_reason}",
+     "result": "Optimistic with Undo (PATCH status:active) for 10 s"
+    },
+    {
+     "action": "Switch on",
+     "call": "PATCH /entitlements/{id} {status:active}",
+     "result": "No confirm"
+    },
+    {
+     "action": "Remove grant made in error",
+     "call": "DELETE /entitlements/{id}",
+     "result": "Only developer grants with no order_id and < 24 h old; never on `free`/`subscription` rows (409 entitlement_platform_managed); 409 otherwise"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACX-02",
+   "title": "Grant access",
+   "section_heading": "D7 · Access",
+   "domain": "D7 Access",
+   "route": "/admin/users/:userId/access/grant",
+   "archetype": "form",
+   "phase": "MVP",
+   "who": "entitlements.manage or app owner (own app)",
+   "purpose": "Give a person access to an app.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "App",
+     "kind": "select",
+     "control": "AdwComboRow",
+     "data": "body.application_id",
+     "rules": "app owners see only their apps"
+    },
+    {
+     "name": "Type",
+     "kind": "radio-group",
+     "control": "GtkCheckButton group",
+     "data": "body.source purchase \\",
+     "rules": "trial \\"
+    },
+    {
+     "name": "Order ID",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "body.order_id",
+     "rules": "required feel for purchase"
+    },
+    {
+     "name": "Starts",
+     "kind": "date-time",
+     "control": "GtkCalendar in popover",
+     "data": "body.starts_at",
+     "rules": "default now"
+    },
+    {
+     "name": "Ends",
+     "kind": "date-time",
+     "control": "GtkCalendar in popover",
+     "data": "body.ends_at",
+     "rules": "optional; required for trial"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Grant",
+     "call": "POST /users/{id}/entitlements (Idempotency-Key, required)",
+     "result": "201 → row Active. 409 entitlement_already_exists → \"Already has access — view it\". A platform-managed row doesn't block a grant (they coexist)."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACX-03",
+   "title": "Turn off / edit access",
+   "section_heading": "D7 · Access",
+   "domain": "D7 Access",
+   "route": "/admin/entitlements/:entId",
+   "archetype": "confirm",
+   "phase": "MVP",
+   "who": "entitlements.manage or app owner",
+   "purpose": "Confirm turning off access, or edit term/source.",
+   "loads": "`GET /entitlements/{id}`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwAlertDialog` (`extra-child` for fields)",
+   "elements": [
+    {
+     "name": "Title",
+     "kind": "text",
+     "control": "GtkLabel",
+     "data": "",
+     "rules": "\"Turn off {app} for {name}?\""
+    },
+    {
+     "name": "Reason",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "body.disabled_reason",
+     "rules": "optional; audit"
+    },
+    {
+     "name": "Edit term (advanced)",
+     "kind": "disclosure",
+     "control": "AdwExpanderRow",
+     "data": "ends_at, source trial→purchase, order_id",
+     "rules": "hidden for platform-managed rows"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Turn off",
+     "call": "PATCH /entitlements/{id} {status:disabled, disabled_reason} (If-Match)",
+     "result": "409 version_conflict → reload and re-apply"
+    },
+    {
+     "action": "Save changes",
+     "call": "PATCH /entitlements/{id}",
+     "result": ""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACX-04",
+   "title": "Access check (Why?)",
+   "section_heading": "D7 · Access",
+   "domain": "D7 Access",
+   "route": "/admin/users/:userId/apps/:appId/why",
+   "archetype": "popover",
+   "phase": "MVP",
+   "who": "users.list or app owner",
+   "purpose": "Explain exactly why a person can or can't use an app.",
+   "loads": "`GET /users/{id}/apps/{appId}/effective-permissions`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`GtkPopover` or `AdwOverlaySplitView` sidebar",
+   "elements": [
+    {
+     "name": "Verdict",
+     "kind": "banner",
+     "control": "AdwBanner",
+     "data": "allowed",
+     "rules": "\"Dana can use Timetrack\" / \"can't\" + first failing reason (user_status, entitlement_status)"
+    },
+    {
+     "name": "Checks",
+     "kind": "checklist",
+     "control": "GtkListBox with status icons",
+     "data": "user_status, entitlement_status, access_paths[], roles, effective_permissions",
+     "rules": "each with pass/fail icon"
+    },
+    {
+     "name": "Computed at",
+     "kind": "caption",
+     "control": "GtkLabel .caption .dim-label",
+     "data": "computed_at",
+     "rules": ""
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ACX-05",
+   "title": "Access (all)",
+   "section_heading": "D7 · Access",
+   "domain": "D7 Access",
+   "route": "/admin/access",
+   "archetype": "table",
+   "phase": "MVP",
+   "who": "entitlements.manage or app owner (confined to own apps)",
+   "purpose": "Every grant across users: audit expirations, trials, revocations.",
+   "loads": "`GET /entitlements?application_id&status&source&user_id&organization_id&order_id&ends_before&include_inactive`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`GtkColumnView` (.data-table) in a card",
+   "elements": [
+    {
+     "name": "Filters",
+     "kind": "chips/menus",
+     "control": "GtkToggleButton pills",
+     "data": "app, status, source, ends before (Expiring in 7/30 days presets)",
+     "rules": ""
+    },
+    {
+     "name": "Columns",
+     "kind": "table",
+     "control": "GtkColumnView .data-table",
+     "data": "user, app, status, source (incl. free / subscription), subscription_id, starts_at, ends_at, order_id, granted_via",
+     "rules": "source filter defaults to developer grants; \"Show platform-managed\" chip adds free/subscription rows"
+    },
+    {
+     "name": "Multi-select",
+     "kind": "selection",
+     "control": "AdwComboRow",
+     "data": "",
+     "rules": "bulk Turn off (confirm, one PATCH per row, progress + per-row result)"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Open row",
+     "call": "→ ACX-01 for that user",
+     "result": ""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ROL-01",
+   "title": "Roles",
+   "section_heading": "D8 · Roles & Permissions",
+   "domain": "D8 Roles & Permissions",
+   "route": "/admin/roles",
+   "archetype": "list",
+   "phase": "MVP",
+   "who": "users.list (read), roles.manage (write)",
+   "purpose": "Platform and app roles.",
+   "loads": "`GET /roles?scope` · `GET /permissions (includes notifications.send)`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Nested `AdwNavigationSplitView` list pane",
+   "elements": [
+    {
+     "name": "Scope",
+     "kind": "segmented",
+     "control": "linked GtkToggleButtons",
+     "data": "scope platform \\",
+     "rules": "{application_id}"
+    },
+    {
+     "name": "Rows",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Role: name, scope, seed, assignment_count, description",
+     "rules": "seed → lock icon"
+    },
+    {
+     "name": "New role",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "→ ROL-03",
+     "rules": "roles.manage"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ROL-02",
+   "title": "Role detail",
+   "section_heading": "D8 · Roles & Permissions",
+   "domain": "D8 Roles & Permissions",
+   "route": "/admin/roles/:roleId",
+   "archetype": "detail",
+   "phase": "MVP",
+   "who": "users.list (read), roles.manage (write)",
+   "purpose": "View or edit a role's permissions.",
+   "loads": "`GET /roles/{id}` · `GET /permissions?scope`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Content pane; `AdwViewSwitcher`; header-bar actions",
+   "elements": [
+    {
+     "name": "Header",
+     "kind": "name, id-chip, scope, assignment_count",
+     "control": "GtkLabel .monospace + copy",
+     "data": "",
+     "rules": ""
+    },
+    {
+     "name": "Description",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "Role.description",
+     "rules": "read-only when seed"
+    },
+    {
+     "name": "Permissions",
+     "kind": "checkbox-list grouped by prefix",
+     "control": "AdwPreferencesGroup of check rows",
+     "data": "Role.permissions ⊂ Permission[].key",
+     "rules": "read-only when seed; show Permission.description"
+    },
+    {
+     "name": "Holders",
+     "kind": "link",
+     "control": "GtkButton .flat / GtkLinkButton",
+     "data": "→ USR-01 filtered by `GET /users?role_id={id}`",
+     "rules": "explicit assignments only; for an app's `default_app_role`, add \"and everyone with access to {app}\" → ACX-05 filtered"
+    },
+    {
+     "name": "Delete role",
+     "kind": "destructive-button",
+     "control": "GtkButton .destructive-action",
+     "data": "DELETE /roles/{id}",
+     "rules": "only non-seed with assignment_count 0"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save",
+     "call": "PATCH /roles/{id} {description, permissions} (If-Match)",
+     "result": ""
+    },
+    {
+     "action": "Delete",
+     "call": "DELETE /roles/{id}",
+     "result": "409 → still assigned"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ROL-03",
+   "title": "New role",
+   "section_heading": "D8 · Roles & Permissions",
+   "domain": "D8 Roles & Permissions",
+   "route": "/admin/roles/new",
+   "archetype": "form",
+   "phase": "MVP",
+   "who": "roles.manage",
+   "purpose": "Define a custom role.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "Name",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "body.name",
+     "rules": "^[a-z][a-z0-9_]{1,40}$; live validation"
+    },
+    {
+     "name": "Scope",
+     "kind": "select",
+     "control": "AdwComboRow",
+     "data": "body.scope",
+     "rules": "platform or an application"
+    },
+    {
+     "name": "Description",
+     "kind": "text-area",
+     "control": "GtkTextView in .card",
+     "data": "body.description",
+     "rules": ""
+    },
+    {
+     "name": "Permissions",
+     "kind": "checkbox-list",
+     "control": "AdwPreferencesGroup of check rows",
+     "data": "body.permissions",
+     "rules": "≥ 1"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Create",
+     "call": "POST /roles",
+     "result": "409 → name taken in scope"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "ROL-04",
+   "title": "User — Roles",
+   "section_heading": "D8 · Roles & Permissions",
+   "domain": "D8 Roles & Permissions",
+   "route": "/admin/users/:userId/roles",
+   "archetype": "tab",
+   "phase": "MVP",
+   "who": "users.list (read), roles.manage (write)",
+   "purpose": "Assign and remove roles for a user.",
+   "loads": "`GET /users/{id}/roles`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwViewStack` page",
+   "elements": [
+    {
+     "name": "Rows",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "UserRoleAssignment: role, application_id, assigned_at, assigned_by, implicit",
+     "rules": "implicit → \"Granted with app access\", not removable"
+    },
+    {
+     "name": "Assign role",
+     "kind": "button → role picker",
+     "control": "AdwDialog with GtkSearchEntry list",
+     "data": "",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Assign",
+     "call": "POST /users/{id}/roles/{roleId}",
+     "result": "idempotent; 200 already held"
+    },
+    {
+     "action": "Remove",
+     "call": "DELETE /users/{id}/roles/{roleId}",
+     "result": "409 → implicit role"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APL-01",
+   "title": "Applications",
+   "section_heading": "D9 · Applications",
+   "domain": "D9 Applications",
+   "route": "/dev/apps",
+   "archetype": "list",
+   "phase": "MVP",
+   "who": "Any (catalog), owner/applications.manage (manage)",
+   "purpose": "Applications you own or administer.",
+   "loads": "`GET /applications?owned=true (staff: all, filter review_status)`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Nested `AdwNavigationSplitView` list pane",
+   "elements": [
+    {
+     "name": "Rows",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "ApplicationSummary: icon, name, slug, visibility, review_status",
+     "rules": ""
+    },
+    {
+     "name": "Register app",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "→ APL-02",
+     "rules": "applications.manage, or anyone with a verified email (self-service, flag `app_registration_self_service`); unverified → disabled with \"Verify your email to register apps\""
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APL-02",
+   "title": "Register application",
+   "section_heading": "D9 · Applications",
+   "domain": "D9 Applications",
+   "route": "/dev/apps/new",
+   "archetype": "wizard",
+   "phase": "MVP",
+   "who": "applications.manage, or anyone with a verified email (self-service)",
+   "purpose": "Register a new application.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwNavigationView` pages",
+   "elements": [
+    {
+     "name": "Name",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "name",
+     "rules": ""
+    },
+    {
+     "name": "Slug",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "slug",
+     "rules": "^[a-z][a-z0-9-]{1,63}$; 'platform' reserved; immutable — warn"
+    },
+    {
+     "name": "Launch URL",
+     "kind": "url-field",
+     "control": "AdwEntryRow input-purpose=url",
+     "data": "launch_url",
+     "rules": "https"
+    },
+    {
+     "name": "Redirect URIs",
+     "kind": "url-list",
+     "control": "AdwPreferencesGroup of AdwEntryRow + add button",
+     "data": "redirect_uris",
+     "rules": ""
+    },
+    {
+     "name": "Visibility",
+     "kind": "radio-group",
+     "control": "GtkCheckButton group",
+     "data": "visibility public \\",
+     "rules": "invite_only \\"
+    },
+    {
+     "name": "Access tier",
+     "kind": "radio-group",
+     "control": "GtkCheckButton group",
+     "data": "access_tier free \\",
+     "rules": "standard (default standard)"
+    },
+    {
+     "name": "Owner",
+     "kind": "select",
+     "control": "AdwComboRow",
+     "data": "owner_user_id \\",
+     "rules": "owner_organization_id"
+    },
+    {
+     "name": "Icon",
+     "kind": "image-picker",
+     "control": "GtkFileDialog (portal)",
+     "data": "icon_url",
+     "rules": ""
+    },
+    {
+     "name": "Support URL",
+     "kind": "url-field",
+     "control": "AdwEntryRow input-purpose=url",
+     "data": "support_url",
+     "rules": ""
+    },
+    {
+     "name": "Email from name",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "email_from_name",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Register",
+     "call": "POST /applications (Idempotency-Key)",
+     "result": "409 slug taken; 422 field errors; 403 `email_not_verified` / `moderation_field_forbidden`; 429 → 10 a day. Staff registration grants the platform-managed Entitlements its access_tier calls for; a self-service app starts `pending_review` and is granted them only once approved (APL-06)."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APL-03",
+   "title": "Application — Overview",
+   "section_heading": "D9 · Applications",
+   "domain": "D9 Applications",
+   "route": "/dev/apps/:appId",
+   "archetype": "detail",
+   "phase": "MVP",
+   "who": "Owner (configure), applications.manage (anything)",
+   "purpose": "Configure an application.",
+   "loads": "`GET /applications/{id}`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Content pane; `AdwViewSwitcher`; header-bar actions",
+   "elements": [
+    {
+     "name": "Header",
+     "kind": "icon, name, id-chip, review StatusBadge, \"Third-party\" chip when `self_registered`",
+     "control": "GtkLabel .monospace + copy",
+     "data": "",
+     "rules": ""
+    },
+    {
+     "name": "Tabs",
+     "kind": "tabs",
+     "control": "AdwViewSwitcher / AdwInlineViewSwitcher",
+     "data": "Overview · Settings schema · Permissions & roles · Push · Keys · Webhooks · Access · Activity",
+     "rules": "Push = APL-07; Keys/Webhooks/Access = KEY-01/WHK-01/ACX-05 filtered to app"
+    },
+    {
+     "name": "Fields",
+     "kind": "settings rows",
+     "control": "Adw*Rows",
+     "data": "name, description, launch_url, redirect_uris, support_url, email_from_name, icon_url (owner); visibility, access_tier (applications.manage)",
+     "rules": "slug read-only with lock"
+    },
+    {
+     "name": "Platform alerts",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "receives_platform_notifications",
+     "rules": "owner-writable; explain that security/account alerts will push under this app's name and icon. For a `self_registered` app only applications.manage can turn it on (owner sees it disabled with a reason)"
+    },
+    {
+     "name": "Review notes",
+     "kind": "banner",
+     "control": "AdwBanner",
+     "data": "review_status rejected/suspended + review_notes",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save field",
+     "call": "PATCH /applications/{id} (If-Match)",
+     "result": "422 → field errors"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APL-04",
+   "title": "Settings schema",
+   "section_heading": "D9 · Applications",
+   "domain": "D9 Applications",
+   "route": "/dev/apps/:appId/schema",
+   "archetype": "tab",
+   "phase": "Phase 2",
+   "who": "Owner / applications.manage",
+   "purpose": "Declare per-user settings the app stores in Substratal.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwViewStack` page",
+   "elements": [
+    {
+     "name": "Properties",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "settings_schema.properties: key, type, enum, default, min/max, maxLength",
+     "rules": "add/edit via form"
+    },
+    {
+     "name": "JSON editor",
+     "kind": "code-editor",
+     "control": "GtkSourceView (JSON)",
+     "data": "settings_schema",
+     "rules": "JSON validation; diff before save"
+    },
+    {
+     "name": "Preview",
+     "kind": "rendered SET-02 form",
+     "control": "SchemaForm preview",
+     "data": "",
+     "rules": "shows exactly what users will see"
+    },
+    {
+     "name": "Stats",
+     "kind": "caption",
+     "control": "GtkLabel .caption .dim-label",
+     "data": "settings_schema_stats",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save",
+     "call": "PATCH /applications/{id} {settings_schema}",
+     "result": "422 → schema rule errors"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APL-05",
+   "title": "Permissions & roles",
+   "section_heading": "D9 · Applications",
+   "domain": "D9 Applications",
+   "route": "/dev/apps/:appId/roles",
+   "archetype": "tab",
+   "phase": "Phase 2",
+   "who": "Owner / applications.manage",
+   "purpose": "Declare app permissions, available app roles and the default role.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwViewStack` page",
+   "elements": [
+    {
+     "name": "Permissions",
+     "kind": "editable list",
+     "control": "GtkColumnView .data-table",
+     "data": "permissions[] {key, description}",
+     "rules": "key app.<slug>.*"
+    },
+    {
+     "name": "Available app roles",
+     "kind": "token list",
+     "control": "custom entry with pills",
+     "data": "available_app_roles (≤ 20)",
+     "rules": ""
+    },
+    {
+     "name": "Default app role",
+     "kind": "select",
+     "control": "AdwComboRow",
+     "data": "default_app_role",
+     "rules": "held implicitly by everyone with access"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save",
+     "call": "PATCH /applications/{id}",
+     "result": ""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APL-06",
+   "title": "Review",
+   "section_heading": "D9 · Applications",
+   "domain": "D9 Applications",
+   "route": "/dev/apps/:appId/review",
+   "archetype": "form",
+   "phase": "Phase 3",
+   "who": "applications.manage",
+   "purpose": "Staff moderation of an application.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "Review status",
+     "kind": "radio-group",
+     "control": "GtkCheckButton group",
+     "data": "review_status",
+     "rules": ""
+    },
+    {
+     "name": "Notes",
+     "kind": "text-area",
+     "control": "GtkTextView in .card",
+     "data": "review_notes",
+     "rules": "visible to owner"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save",
+     "call": "PATCH /applications/{id} {review_status, review_notes}",
+     "result": ""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "APL-07",
+   "title": "Push credentials",
+   "section_heading": "D9 · Applications",
+   "domain": "D9 Applications",
+   "route": "/dev/apps/:appId/push",
+   "archetype": "tab",
+   "phase": "Phase 2",
+   "who": "Owner or applications.manage with a User token (write); app key / owner (read)",
+   "purpose": "Configure APNs, FCM and Web Push for an Application so it can send push notifications.",
+   "loads": "`GET /applications/{id}/push-credentials`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "To prove a credential end to end, the owner registers a device of their own app and uses its device test (NTF-03 lists only devices the owner holds).",
+   "entry_points": "",
+   "container": "`AdwViewStack` page",
+   "elements": [
+    {
+     "name": "Providers",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "PushCredential per provider apns \\",
+     "rules": "fcm \\"
+    },
+    {
+     "name": "Add APNs",
+     "kind": "form",
+     "control": "AdwDialog form",
+     "data": "POST body: provider apns, team_id (10), key_id (10), topic (bundle id), private_key (.p8)",
+     "rules": "file picker / drop / paste for the .p8; key never shown again"
+    },
+    {
+     "name": "Add FCM",
+     "kind": "form",
+     "control": "AdwDialog form",
+     "data": "POST body: provider fcm, service_account (JSON file)",
+     "rules": "drop/pick the downloaded JSON; validate shape client-side"
+    },
+    {
+     "name": "Add Web Push",
+     "kind": "form",
+     "control": "AdwDialog form",
+     "data": "POST body: provider web_push, subject (mailto:/https:)",
+     "rules": "platform generates VAPID keys; show vapid_public_key with Copy for the web client"
+    },
+    {
+     "name": "Rotate / fix",
+     "kind": "form",
+     "control": "AdwDialog form",
+     "data": "PATCH /applications/{id}/push-credentials/{provider} {key material \\",
+     "rules": "status: active}"
+    },
+    {
+     "name": "Remove",
+     "kind": "destructive-button",
+     "control": "GtkButton .destructive-action",
+     "data": "DELETE /applications/{id}/push-credentials/{provider}",
+     "rules": "confirm; web_push removal deactivates every browser subscription"
+    },
+    {
+     "name": "Platform alerts",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "Application.receives_platform_notifications",
+     "rules": "mirror of APL-03 toggle"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Add",
+     "call": "POST /applications/{id}/push-credentials",
+     "result": "201; 409 push_credential_exists → Edit; 422 invalid_push_credential → field error; 400 user_token_required never happens in the Hub (User token)"
+    },
+    {
+     "action": "Fetch one",
+     "call": "GET /applications/{id}/push-credentials/{provider}",
+     "result": "on Edit"
+    },
+    {
+     "action": "Save",
+     "call": "PATCH /applications/{id}/push-credentials/{provider}",
+     "result": "409 invalid_status_transition"
+    },
+    {
+     "action": "Remove",
+     "call": "DELETE /applications/{id}/push-credentials/{provider}",
+     "result": "204"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "KEY-01",
+   "title": "API keys",
+   "section_heading": "D10 · Developer Credentials",
+   "domain": "D10 Developer Credentials",
+   "route": "/dev/keys",
+   "archetype": "table",
+   "phase": "MVP",
+   "who": "api_keys.manage or app owner",
+   "purpose": "Service and agent credentials.",
+   "loads": "`GET /api-keys?scope&mode&intended_use&include_inactive`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`GtkColumnView` (.data-table) in a card",
+   "elements": [
+    {
+     "name": "Filters",
+     "kind": "chips",
+     "control": "GtkToggleButton pills",
+     "data": "mode live\\",
+     "rules": "test, intended_use, include revoked"
+    },
+    {
+     "name": "Columns",
+     "kind": "table",
+     "control": "GtkColumnView .data-table",
+     "data": "name, scope, secret_hint, mode, intended_use, restrict_destructive, last_used_at, expires_at, status(revoked_at)",
+     "rules": ""
+    },
+    {
+     "name": "Create key",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "→ KEY-02",
+     "rules": ""
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "KEY-02",
+   "title": "Create API key",
+   "section_heading": "D10 · Developer Credentials",
+   "domain": "D10 Developer Credentials",
+   "route": "/dev/keys/new",
+   "archetype": "form",
+   "phase": "MVP",
+   "who": "api_keys.manage or app owner (app-scoped)",
+   "purpose": "Create a key with least-privilege permissions.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "Name",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "name",
+     "rules": ""
+    },
+    {
+     "name": "Scope",
+     "kind": "select",
+     "control": "AdwComboRow",
+     "data": "scope platform \\",
+     "rules": "application"
+    },
+    {
+     "name": "Mode",
+     "kind": "segmented",
+     "control": "linked GtkToggleButtons",
+     "data": "mode live \\",
+     "rules": "test"
+    },
+    {
+     "name": "Used by",
+     "kind": "radio-group",
+     "control": "GtkCheckButton group",
+     "data": "intended_use service \\",
+     "rules": "agent"
+    },
+    {
+     "name": "Block destructive operations",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "restrict_destructive",
+     "rules": ""
+    },
+    {
+     "name": "Permissions",
+     "kind": "checkbox-list",
+     "control": "AdwPreferencesGroup of check rows",
+     "data": "permissions",
+     "rules": "filtered by scope via GET /permissions; app-scoped keys offer the five app-confined platform permissions incl. notifications.send"
+    },
+    {
+     "name": "Expires",
+     "kind": "date-field",
+     "control": "GtkCalendar in popover",
+     "data": "expires_at",
+     "rules": "optional; presets 30/90/365 days"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Create",
+     "call": "POST /api-keys",
+     "result": "201 ApiKeyWithSecret → KEY-03"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "KEY-03",
+   "title": "Secret reveal",
+   "section_heading": "D10 · Developer Credentials",
+   "domain": "D10 Developer Credentials",
+   "route": "(modal)",
+   "archetype": "secret",
+   "phase": "MVP",
+   "who": "Creator",
+   "purpose": "Show a new API key secret, webhook signing secret, or recovery codes exactly once.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` `can-close=false`",
+   "elements": [
+    {
+     "name": "Secret",
+     "kind": "monospace selectable text",
+     "control": "GtkLabel selectable .monospace",
+     "data": "secret",
+     "rules": "never logged, never persisted, excluded from screenshots where the OS allows"
+    },
+    {
+     "name": "Copy",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "clipboard (sensitive)",
+     "rules": "auto-clear after 60 s where supported"
+    },
+    {
+     "name": "Acknowledge",
+     "kind": "checkbox",
+     "control": "GtkCheckButton",
+     "data": "client",
+     "rules": "gates Done; modal not dismissible until checked"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "KEY-04",
+   "title": "API key detail",
+   "section_heading": "D10 · Developer Credentials",
+   "domain": "D10 Developer Credentials",
+   "route": "/dev/keys/:keyId",
+   "archetype": "detail",
+   "phase": "MVP",
+   "who": "api_keys.manage or app owner",
+   "purpose": "Edit, rotate or revoke a key.",
+   "loads": "`GET /api-keys/{id}` · `GET /audit-events?actor_id={id}`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Content pane; `AdwViewSwitcher`; header-bar actions",
+   "elements": [
+    {
+     "name": "Fields",
+     "kind": "settings rows",
+     "control": "Adw*Rows",
+     "data": "name, permissions, restrict_destructive (editable); scope, mode, intended_use, expires_at, created_by, last_used_at (read-only)",
+     "rules": ""
+    },
+    {
+     "name": "Rotate",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "POST /api-keys/{id}/rotate",
+     "rules": "confirm: no overlap"
+    },
+    {
+     "name": "Revoke",
+     "kind": "destructive-button",
+     "control": "GtkButton .destructive-action",
+     "data": "DELETE /api-keys/{id}",
+     "rules": "confirm"
+    },
+    {
+     "name": "Recent activity",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "audit events by this key",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save",
+     "call": "PATCH /api-keys/{id}",
+     "result": ""
+    },
+    {
+     "action": "Rotate",
+     "call": "POST …/rotate",
+     "result": "200 → KEY-03"
+    },
+    {
+     "action": "Revoke",
+     "call": "DELETE /api-keys/{id}",
+     "result": "204 → row shows Revoked"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "WHK-01",
+   "title": "Webhooks",
+   "section_heading": "D10 · Developer Credentials",
+   "domain": "D10 Developer Credentials",
+   "route": "/dev/webhooks",
+   "archetype": "list",
+   "phase": "Phase 2",
+   "who": "webhooks.manage or app owner",
+   "purpose": "Endpoints that receive access-change events.",
+   "loads": "`GET /webhooks?application_id`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Nested `AdwNavigationSplitView` list pane",
+   "elements": [
+    {
+     "name": "Rows",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Webhook: url, events count, status healthy\\",
+     "rules": "unhealthy\\"
+    },
+    {
+     "name": "Add webhook",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "→ WHK-02",
+     "rules": ""
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "WHK-02",
+   "title": "Add / edit webhook",
+   "section_heading": "D10 · Developer Credentials",
+   "domain": "D10 Developer Credentials",
+   "route": "/dev/webhooks/new",
+   "archetype": "form",
+   "phase": "Phase 2",
+   "who": "webhooks.manage or app owner",
+   "purpose": "Subscribe a URL to events.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "URL",
+     "kind": "url-field",
+     "control": "AdwEntryRow input-purpose=url",
+     "data": "url",
+     "rules": "https required"
+    },
+    {
+     "name": "Events",
+     "kind": "checkbox-list grouped",
+     "control": "AdwPreferencesGroup of check rows",
+     "data": "events (WebhookEvent enum: access.*, entitlement.*, role.*, user.*, organization.*, application.*, device.*, notification.push_failed, push_credential.failed, webhook.test)",
+     "rules": "presets: Access changes (access.granted, access.revoked) · Push health (notification.push_failed, push_credential.failed, device.deactivated)"
+    },
+    {
+     "name": "Description",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "description",
+     "rules": ""
+    },
+    {
+     "name": "Scope",
+     "kind": "select",
+     "control": "AdwComboRow",
+     "data": "scope",
+     "rules": ""
+    },
+    {
+     "name": "Payload version",
+     "kind": "select",
+     "control": "AdwComboRow",
+     "data": "api_version (a date)",
+     "rules": "edit only; the webhook payload version, independent of the `Substratal-Version` request header (CLIENT-ARCHITECTURE §4.1)"
+    },
+    {
+     "name": "Enabled",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "status disabled ↔ healthy",
+     "rules": "edit only (re-enable)"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Create",
+     "call": "POST /webhooks",
+     "result": "201 WebhookWithSecret → KEY-03"
+    },
+    {
+     "action": "Save",
+     "call": "PATCH /webhooks/{id}",
+     "result": ""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "WHK-03",
+   "title": "Webhook — Deliveries",
+   "section_heading": "D10 · Developer Credentials",
+   "domain": "D10 Developer Credentials",
+   "route": "/dev/webhooks/:hookId",
+   "archetype": "detail",
+   "phase": "Phase 2",
+   "who": "webhooks.manage or app owner",
+   "purpose": "Delivery history, testing and secret rotation.",
+   "loads": "`GET /webhooks/{id}` · `GET /webhooks/{id}/deliveries?status&since&event_id`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Content pane; `AdwViewSwitcher`; header-bar actions",
+   "elements": [
+    {
+     "name": "Header actions",
+     "kind": "toolbar",
+     "control": "AdwHeaderBar buttons",
+     "data": "",
+     "rules": "Send test · Rotate secret · Edit · Delete"
+    },
+    {
+     "name": "Filter",
+     "kind": "chips",
+     "control": "GtkToggleButton pills",
+     "data": "status pending\\",
+     "rules": "succeeded\\"
+    },
+    {
+     "name": "Rows",
+     "kind": "table",
+     "control": "GtkColumnView .data-table",
+     "data": "WebhookDelivery: status, response_status, event_type, event_id, attempt, duration_ms, created_at, next_retry_at, error",
+     "rules": "failed → Redeliver"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Send test",
+     "call": "POST /webhooks/{id}/test",
+     "result": "202 → new pending row appears on refresh (poll 2 s × 5)"
+    },
+    {
+     "action": "Rotate secret",
+     "call": "POST /webhooks/{id}/rotate-secret",
+     "result": "confirm (24 h overlap) → KEY-03"
+    },
+    {
+     "action": "Redeliver",
+     "call": "POST /webhooks/{id}/deliveries/{deliveryId}/redeliver",
+     "result": "202 toast; same event_id"
+    },
+    {
+     "action": "Delete",
+     "call": "DELETE /webhooks/{id}",
+     "result": "confirm"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "WHK-04",
+   "title": "Delivery detail",
+   "section_heading": "D10 · Developer Credentials",
+   "domain": "D10 Developer Credentials",
+   "route": "/dev/webhooks/:hookId/deliveries/:deliveryId",
+   "archetype": "popover",
+   "phase": "Phase 2",
+   "who": "webhooks.manage or app owner",
+   "purpose": "One delivery attempt in detail.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`GtkPopover` or `AdwOverlaySplitView` sidebar",
+   "elements": [
+    {
+     "name": "Facts",
+     "kind": "key-value",
+     "control": "AdwActionRow subtitle",
+     "data": "all WebhookDelivery fields",
+     "rules": ""
+    },
+    {
+     "name": "Redeliver",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "",
+     "rules": ""
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "BIL-01",
+   "title": "My plan",
+   "section_heading": "D11 · Plan & Billing",
+   "domain": "D11 Plan & Billing",
+   "route": "/billing",
+   "archetype": "settings",
+   "phase": "Phase 2",
+   "who": "Self; billing.manage can view any User's (read-only)",
+   "purpose": "Free or Standard: what covers you, your own subscription, upgrade and manage billing.",
+   "loads": "`GET /users/me/subscription`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES; After return from checkout: poll GET /users/me/subscription every 2 s (max 30 s) until plan = standard, showing \"Finishing up…\"; Downgraded: \"Your Standard access ended on {date}. Your data is kept.\"",
+   "notes": "Business/Enterprise aren't offered (422 plan_requires_sales); show \"Contact sales\" link only. Annual plans and a Standard trial are undecided in the API (DECISIONS #31) — no UI for them.",
+   "entry_points": "",
+   "container": "`AdwPreferencesPage`",
+   "elements": [
+    {
+     "name": "Plan card",
+     "kind": "card",
+     "control": ".card box",
+     "data": "UserSubscription.plan free\\",
+     "rules": "standard"
+    },
+    {
+     "name": "Covered by",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "plan_sources[]: {type user\\",
+     "rules": "organization, id}"
+    },
+    {
+     "name": "Double coverage tip",
+     "kind": "banner",
+     "control": "AdwBanner",
+     "data": "plan_sources has both user and organization",
+     "rules": "\"Your organization already covers you. You can cancel your own subscription in Manage billing.\" (no automatic refund)"
+    },
+    {
+     "name": "Your subscription",
+     "kind": "key-value",
+     "control": "AdwActionRow subtitle",
+     "data": "Subscription.status, current_period_end, cancel_at_period_end, unit_amount, currency",
+     "rules": "status badge via status-semantics; past_due → warning banner (Stripe retries ~3 weeks)"
+    },
+    {
+     "name": "Upgrade to Standard",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "→ BIL-03 checkout",
+     "rules": "when no covering subscription, or own subscription is incomplete/incomplete_expired/canceled/unpaid; price \"$6 per month\" from unit_amount when known, else from pricing config; store flags on iOS/Android"
+    },
+    {
+     "name": "Manage billing",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "→ BIL-03 portal",
+     "rules": "when the user has completed a checkout (own subscription exists and isn't incomplete)"
+    },
+    {
+     "name": "What Standard includes",
+     "kind": "link",
+     "control": "GtkButton .flat / GtkLinkButton",
+     "data": "standard apps from GET /applications?access_tier=standard",
+     "rules": "count + list"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "BIL-02",
+   "title": "Organization subscription",
+   "section_heading": "D11 · Plan & Billing",
+   "domain": "D11 Plan & Billing",
+   "route": "/orgs/:orgId/subscription",
+   "archetype": "tab",
+   "phase": "Phase 2",
+   "who": "org_admin (manage); billing.manage (read + portal)",
+   "purpose": "An organization's Standard subscription and which members it covers.",
+   "loads": "`GET /organizations/{id}/subscription` · `GET /organizations/{id}/members (for the member picker)`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "Members gained or lost take effect at once; say so before saving.",
+   "entry_points": "",
+   "container": "`AdwViewStack` page",
+   "elements": [
+    {
+     "name": "Plan card",
+     "kind": "card",
+     "control": ".card box",
+     "data": "OrganizationSubscription.plan + Subscription.status, current_period_end, cancel_at_period_end",
+     "rules": ""
+    },
+    {
+     "name": "Billed users",
+     "kind": "key-value",
+     "control": "AdwActionRow subtitle",
+     "data": "quantity.current (live), quantity.last_synced + last_synced_at, unit_amount",
+     "rules": "\"31 covered · 30 billed on next invoice (synced daily)\""
+    },
+    {
+     "name": "Who's covered",
+     "kind": "radio-group",
+     "control": "GtkCheckButton group",
+     "data": "member_scope all_members \\",
+     "rules": "allowlist \\"
+    },
+    {
+     "name": "Members",
+     "kind": "member-picker",
+     "control": "AdwDialog with GtkSearchEntry list",
+     "data": "member_overrides (active members only)",
+     "rules": "visible for allowlist/denylist"
+    },
+    {
+     "name": "Subscribe the organization",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "→ BIL-03 org checkout (member_scope optional)",
+     "rules": "org_admin; when no subscription or not in force"
+    },
+    {
+     "name": "Manage billing",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "→ BIL-03 org portal",
+     "rules": "org_admin or billing.manage"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Save coverage",
+     "call": "PATCH /organizations/{id}/subscription {member_scope, member_overrides} (If-Match)",
+     "result": "effective immediately (access.granted/revoked); billed from next daily sync. 422 member_override_not_a_member → mark rows. 404 subscription_not_found → show Subscribe."
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "BIL-03",
+   "title": "Checkout / billing portal",
+   "section_heading": "D11 · Plan & Billing",
+   "domain": "D11 Plan & Billing",
+   "route": "/billing/return",
+   "archetype": "handoff",
+   "phase": "Phase 2",
+   "who": "Self (individual); org_admin (org checkout); org_admin or billing.manage (org portal)",
+   "purpose": "Hand off to Stripe in the browser and confirm the result on return.",
+   "loads": "",
+   "states": "",
+   "notes": "success_url / cancel_url / return_url must be https: use https://dashboard.substratalapps.com/billing/return… (Universal/App Links open the native app).",
+   "entry_points": "",
+   "container": "`GtkUriLauncher` (OpenURI portal)",
+   "elements": [],
+   "actions": [
+    {
+     "action": "Upgrade (individual)",
+     "call": "POST /users/me/billing/checkout-sessions {plan:standard, success_url, cancel_url} (Idempotency-Key)",
+     "result": "201 {url, expires_at} → open url externally. 409 subscription_exists → open portal instead. 409 test_mode_billing_unavailable / 503 billing_unavailable → explain."
+    },
+    {
+     "action": "Manage billing (individual)",
+     "call": "POST /users/me/billing/portal-sessions {return_url}",
+     "result": "201 → open url externally. 409 no_billing_account → hide button."
+    },
+    {
+     "action": "Subscribe organization",
+     "call": "POST /organizations/{id}/billing/checkout-sessions {plan:standard, success_url, cancel_url, member_scope?, member_overrides?} (Idempotency-Key)",
+     "result": "as individual"
+    },
+    {
+     "action": "Manage organization billing",
+     "call": "POST /organizations/{id}/billing/portal-sessions {return_url}",
+     "result": "as individual"
+    },
+    {
+     "action": "Return",
+     "call": "deep link /billing/return?checkout=success\\",
+     "result": "cancelled (or /orgs/:orgId/subscription?…)`"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "BIL-04",
+   "title": "Tenant & infrastructure",
+   "section_heading": "D11 · Plan & Billing",
+   "domain": "D11 Plan & Billing",
+   "route": "/dev/tenant",
+   "archetype": "detail",
+   "phase": "Phase 2",
+   "who": "Tenant owner (read), tenants.manage (write)",
+   "purpose": "Where an Application owner's data lives, and support-run tier changes. Tenants aren't billed.",
+   "loads": "`GET /tenants` · `GET /tenants/{id}` · `GET /tenants/{id}/tier-change-requests`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "Content pane; `AdwViewSwitcher`; header-bar actions",
+   "elements": [
+    {
+     "name": "Facts",
+     "kind": "key-value",
+     "control": "AdwActionRow subtitle",
+     "data": "Tenant: tier, region, status, owner, application_count",
+     "rules": "status migrating → banner, writes may 503"
+    },
+    {
+     "name": "Tier change requests",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "TenantTierChangeRequest: from→requested tier/region, status, scheduled_for, reason, notes",
+     "rules": ""
+    },
+    {
+     "name": "Request change",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "→ form: requested_tier, requested_region, reason",
+     "rules": "tenants.manage only; owners see \"isolated and dedicated-region tiers come with business pricing — contact sales\""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Open request",
+     "call": "POST /tenants/{id}/tier-change-requests",
+     "result": "422/409 errors"
+    },
+    {
+     "action": "Open request detail",
+     "call": "GET /tenants/{id}/tier-change-requests/{requestId}",
+     "result": "polls every 30 s while visible"
+    },
+    {
+     "action": "Advance request",
+     "call": "PATCH /tenants/{id}/tier-change-requests/{requestId} {status, scheduled_for, notes} (If-Match)",
+     "result": "staff only; status scheduled → in_progress → completed, or cancelled"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "AUD-01",
+   "title": "Audit log",
+   "section_heading": "D12 · Audit Log",
+   "domain": "D12 Audit Log",
+   "route": "/admin/audit",
+   "archetype": "table",
+   "phase": "MVP",
+   "who": "audit.view",
+   "purpose": "Who changed what, when.",
+   "loads": "`GET /audit-events?since&until&actor_type&actor_id&action&target_type&target_id&target_user_id&application_id&organization_id&tenant_id`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "Hot window is one year for every Tenant; read the `Audit-Hot-Window-Start` response header and show it in an info caption. **Export…** (flag `audit_export`): `POST /audit-exports {…the current filters, format: ndjson|csv}` (Idempotency-Key) → 202; poll `GET /audit-exports/{id}` every 3 s while `pending`/`running`, then offer `download_url` (signed for 15 minutes: re-fetch the export for a fresh link; kept 7 days). 429 → 20 exports a day. New actions to group in the filter: subscription.*, push_credential.*, device.deleted, audit.exported, user.sessions_revoked, user.expired.",
+   "entry_points": "",
+   "container": "`GtkColumnView` (.data-table) in a card",
+   "elements": [
+    {
+     "name": "Filters",
+     "kind": "search + menus",
+     "control": "GtkSearchEntry",
+     "data": "time range (presets 1h/24h/7d/custom), actor type, action (grouped by prefix, wildcard), resource",
+     "rules": "filters encoded in URL/state for sharing"
+    },
+    {
+     "name": "Rows",
+     "kind": "table",
+     "control": "GtkColumnView .data-table",
+     "data": "timestamp, actor (type icon + name/id), action, target (type + link), app/org",
+     "rules": "relative time with absolute on hover/long-press"
+    },
+    {
+     "name": "Inspector",
+     "kind": "side panel",
+     "control": "AdwOverlaySplitView",
+     "data": "→ AUD-02",
+     "rules": "desktop: trailing pane; compact: push"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "AUD-02",
+   "title": "Audit event",
+   "section_heading": "D12 · Audit Log",
+   "domain": "D12 Audit Log",
+   "route": "/admin/audit/:eventId",
+   "archetype": "popover",
+   "phase": "MVP",
+   "who": "audit.view",
+   "purpose": "One event with before/after diff.",
+   "loads": "`GET /audit-events/{id}`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`GtkPopover` or `AdwOverlaySplitView` sidebar",
+   "elements": [
+    {
+     "name": "Facts",
+     "kind": "key-value",
+     "control": "AdwActionRow subtitle",
+     "data": "action, actor, target, target_user_id, application_id, organization_id, tenant_id, request_id, timestamp",
+     "rules": "each id links to its screen"
+    },
+    {
+     "name": "Diff",
+     "kind": "diff view",
+     "control": "GtkSourceView diff",
+     "data": "before / after",
+     "rules": "JSON diff, changed keys highlighted"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "NTF-01",
+   "title": "Inbox",
+   "section_heading": "D13 · Notifications",
+   "domain": "D13 Notifications",
+   "route": "/inbox",
+   "archetype": "list",
+   "phase": "Phase 2",
+   "who": "Self",
+   "purpose": "Every notification the person has received — from every app and from Substratal — with read and archived state.",
+   "loads": "`GET /users/me/notifications?state&application_id&source&category&priority&created_after&created_before&include_inactive` · `GET /users/me/notifications/unread-count` · `GET /applications (names, icons)`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES; Empty: \"You're all caught up\"; Feature off (501 not_implemented): hide Inbox entry points; badges fall back to none; Retention: items older than 90 days disappear (caption in empty Archived view)",
+   "notes": "The Inbox shows notifications from every Application plus platform alerts, but push banners for another app's notifications arrive through that app's own install — the Hub only pushes its own (`app_hub`) notifications and platform alerts.",
+   "entry_points": "Bell in the toolbar / Inbox in the sidebar (desktop) / Inbox tab (compact); Tapping a push; Badges (app icon, Dock/taskbar, PWA)",
+   "container": "Nested `AdwNavigationSplitView` list pane",
+   "elements": [
+    {
+     "name": "Filter",
+     "kind": "segmented",
+     "control": "linked GtkToggleButtons",
+     "data": "Unread · All · Archived (state)",
+     "rules": "default All (unarchived)"
+    },
+    {
+     "name": "App filter",
+     "kind": "menu",
+     "control": "GtkMenuButton",
+     "data": "application_id, source=platform (\"Substratal\")",
+     "rules": "per-app unread counts from unread-count.applications[]"
+    },
+    {
+     "name": "Rows",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Notification: app icon (or Substratal mark for source=platform), title, body (2 lines), category, priority high → \"Important\" marker, created_at relative, unread dot",
+     "rules": "grouped Today / Yesterday / Earlier; high priority security.* rows show a shield icon"
+    },
+    {
+     "name": "Mark all as read",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "POST /users/me/notifications/mark-read {before: newest loaded created_at, application_id?}",
+     "rules": "respects current app filter; uses `before` so items arriving now aren't swept"
+    },
+    {
+     "name": "Multi-select",
+     "kind": "selection",
+     "control": "AdwComboRow",
+     "data": "",
+     "rules": "bulk Mark read / Mark unread / Archive (one PATCH per row)"
+    },
+    {
+     "name": "Row actions",
+     "kind": "row-button",
+     "control": "suffix GtkButton .flat",
+     "data": "PATCH /users/me/notifications/{notificationId} {state}",
+     "rules": "swipe/hover: Read ⇄ Unread, Archive"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Open row",
+     "call": "→ NTF-02 and PATCH {state:read}",
+     "result": "optimistic; badge decrements"
+    },
+    {
+     "action": "Archive",
+     "call": "PATCH /users/me/notifications/{notificationId} {state:archived}",
+     "result": "toast with Undo (PATCH state:read)"
+    },
+    {
+     "action": "Mark read / unread",
+     "call": "PATCH /users/me/notifications/{notificationId} {state}",
+     "result": ""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "NTF-02",
+   "title": "Notification",
+   "section_heading": "D13 · Notifications",
+   "domain": "D13 Notifications",
+   "route": "/inbox/:notificationId",
+   "archetype": "popover",
+   "phase": "Phase 2",
+   "who": "Self (users.list via NTF-05)",
+   "purpose": "One notification in full, with where it leads and how its push went.",
+   "loads": "`GET /users/me/notifications/{notificationId}`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`GtkPopover` or `AdwOverlaySplitView` sidebar",
+   "elements": [
+    {
+     "name": "Header",
+     "kind": "icon + app name + time",
+     "control": "GtkImage + labels + badge",
+     "data": "application_id / source, created_at",
+     "rules": ""
+    },
+    {
+     "name": "Title & body",
+     "kind": "text",
+     "control": "GtkLabel",
+     "data": "title, body",
+     "rules": "full text"
+    },
+    {
+     "name": "Open",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "action_url",
+     "rules": "Hub route → navigate in-app; https → open in browser / installed app (Universal/App Link); private scheme → hand to OS; hidden when null"
+    },
+    {
+     "name": "Contextual actions",
+     "kind": "buttons",
+     "control": "GtkButton",
+     "data": "by category",
+     "rules": "security.new_sign_in → \"Review sessions\" (ACC-04) · security.password_changed / email_changed / mfa_disabled / session_reuse_detected → \"Secure my account\" (ACC-04) · account.organization_invitation → Accept / Decline (ORG-09) · account.access_granted → Open app (APP-03)"
+    },
+    {
+     "name": "Delivery",
+     "kind": "disclosure",
+     "control": "AdwExpanderRow",
+     "data": "push.status, devices_targeted/sent/failed, skip_reason, deliveries[] (30 days)",
+     "rules": "plain-language: \"Pushed to 2 devices\", \"Not pushed — notifications are off for this app\""
+    },
+    {
+     "name": "Mark unread / Archive",
+     "kind": "toolbar",
+     "control": "AdwHeaderBar buttons",
+     "data": "PATCH {state}",
+     "rules": ""
+    }
+   ],
+   "actions": [
+    {
+     "action": "Opened",
+     "call": "PATCH /users/me/notifications/{notificationId} {state:read}",
+     "result": "on open if unread"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "NTF-03",
+   "title": "Devices & notifications",
+   "section_heading": "D13 · Notifications",
+   "domain": "D13 Notifications",
+   "route": "/account/devices",
+   "archetype": "settings",
+   "phase": "Phase 2",
+   "who": "Self",
+   "purpose": "Where push notifications reach this person, and controls for this device.",
+   "loads": "`GET /users/me/devices?include_inactive=true` · `GET /users/me/settings (notifications.push)`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "Device tokens are never displayed (only token_hint).",
+   "entry_points": "",
+   "container": "`AdwPreferencesPage`",
+   "elements": [
+    {
+     "name": "This device",
+     "kind": "card",
+     "control": ".card box",
+     "data": "Hub Device for this install (matched by stored device id)",
+     "rules": "status, \"Notifications are on\" / off / blocked by OS; button Turn on (→ NTF-04) or Turn off"
+    },
+    {
+     "name": "Push notifications (all apps)",
+     "kind": "toggle",
+     "control": "AdwSwitchRow",
+     "data": "Settings.notifications.push",
+     "rules": "same control as SET-01"
+    },
+    {
+     "name": "Devices",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Device: name, application_id (app icon), provider, environment, status, inactive_reason, last_registered_at, last_delivery_at, token_hint",
+     "rules": "grouped by app; inactive rows dimmed with reason (\"Signed out\", \"Not opened in 9 months\"…)"
+    },
+    {
+     "name": "Rename",
+     "kind": "row-button",
+     "control": "suffix GtkButton .flat",
+     "data": "PATCH /users/me/devices/{deviceId} {name}",
+     "rules": ""
+    },
+    {
+     "name": "Send test notification",
+     "kind": "row-button",
+     "control": "suffix GtkButton .flat",
+     "data": "POST /users/me/devices/{deviceId}/test",
+     "rules": "Hub devices only; shows provider result inline (sent / failed + error) within 10 s"
+    },
+    {
+     "name": "Remove",
+     "kind": "row-button",
+     "control": "suffix GtkButton .flat",
+     "data": "DELETE /users/me/devices/{deviceId}",
+     "rules": "confirm; that install stops receiving pushes until it registers again"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Turn off on this device",
+     "call": "DELETE /users/me/devices/{deviceId}",
+     "result": "and stop re-registering until the user turns it back on"
+    },
+    {
+     "action": "Test",
+     "call": "POST /users/me/devices/{deviceId}/test",
+     "result": "429 → \"Try again later (10 tests per hour)\"; 409 push_not_configured → \"Push isn't set up for this app yet\""
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "NTF-04",
+   "title": "Turn on notifications",
+   "section_heading": "D13 · Notifications",
+   "domain": "D13 Notifications",
+   "route": "/account/devices/enable",
+   "archetype": "wizard",
+   "phase": "Phase 2",
+   "who": "Self",
+   "purpose": "Explain, request the OS permission, and register this install for push.",
+   "loads": "",
+   "states": "",
+   "notes": "Re-register on launch at most once a day (keeps the device from going stale after 270 days). Windows and Linux have no supported push provider in the API: this screen is replaced by an in-app explanation and local notifications from polling (see their PLATFORM-SPEC).",
+   "entry_points": "First time a notification-worthy moment happens (org invite, first launch after sign-in on mobile, enabling in NTF-03/SET-01) — never on cold start before sign-in",
+   "container": "`AdwDialog` with `AdwNavigationView` pages",
+   "elements": [
+    {
+     "name": "Primer",
+     "kind": "text + illustration",
+     "control": "GtkLabel",
+     "data": "",
+     "rules": "what you'll get: security alerts, invitations, access changes; \"You can change this anytime\""
+    },
+    {
+     "name": "Turn on",
+     "kind": "primary-button",
+     "control": "GtkButton .suggested-action .pill",
+     "data": "OS permission prompt",
+     "rules": "platform API per PLATFORM-SPEC"
+    },
+    {
+     "name": "Not now",
+     "kind": "button",
+     "control": "GtkButton",
+     "data": "",
+     "rules": "snooze 14 days"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Permission granted",
+     "call": "POST /users/me/devices {application_id: app_hub, provider, token \\",
+     "result": "subscription, environment (apns), name, app_version}`"
+    },
+    {
+     "action": "Token rotated by OS",
+     "call": "PATCH /users/me/devices/{deviceId} {token \\",
+     "result": "subscription}`"
+    },
+    {
+     "action": "Permission denied",
+     "call": "—",
+     "result": "Settings shows \"Blocked — Open system settings\" deep link"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "NTF-05",
+   "title": "User — Notifications & devices",
+   "section_heading": "D13 · Notifications",
+   "domain": "D13 Notifications",
+   "route": "/admin/users/:userId/notifications",
+   "archetype": "tab",
+   "phase": "Phase 2",
+   "who": "users.list (read), users.manage (delete devices)",
+   "purpose": "Support view of a person's inbox and push devices for investigations.",
+   "loads": "`GET /users/{id}/notifications?include_inactive=true` · `GET /users/{id}/notifications/{notificationId}` · `GET /users/{id}/devices?include_inactive=true` · `GET /users/{id}/devices/{deviceId}`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry; codes per COPY-AND-STATES",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwViewStack` page",
+   "elements": [
+    {
+     "name": "Inbox",
+     "kind": "table",
+     "control": "GtkColumnView .data-table",
+     "data": "Notification: created_at, application/source, category, priority, title, state, push.status, skip_reason",
+     "rules": "read-only; never mark the user's items read"
+    },
+    {
+     "name": "Delivery detail",
+     "kind": "side panel",
+     "control": "AdwOverlaySplitView",
+     "data": "deliveries[]: provider, status, attempts, error, sent_at",
+     "rules": ""
+    },
+    {
+     "name": "Devices",
+     "kind": "table",
+     "control": "GtkColumnView .data-table",
+     "data": "Device: app, provider, environment, status, inactive_reason, name, app_version, last_registered_at, last_delivery_at",
+     "rules": ""
+    },
+    {
+     "name": "Delete device",
+     "kind": "destructive-button",
+     "control": "GtkButton .destructive-action",
+     "data": "DELETE /users/{id}/devices/{deviceId}",
+     "rules": "users.manage; audited (device.deleted)"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "NTF-06",
+   "title": "Send notification",
+   "section_heading": "D13 · Notifications",
+   "domain": "D13 Notifications",
+   "route": "/admin/notifications/new",
+   "archetype": "form",
+   "phase": "Phase 2",
+   "who": "platform notifications.send",
+   "purpose": "Staff tool: send one notification to one person on behalf of an Application.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "`AdwDialog` with `AdwPreferencesGroup`",
+   "elements": [
+    {
+     "name": "Recipient",
+     "kind": "picker",
+     "control": "AdwDialog with GtkSearchEntry list",
+     "data": "user (GET /users?q)",
+     "rules": "must have active access to the chosen app"
+    },
+    {
+     "name": "Application",
+     "kind": "select",
+     "control": "AdwComboRow",
+     "data": "body.application_id",
+     "rules": "required for platform senders"
+    },
+    {
+     "name": "Category",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "body.category",
+     "rules": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$; security./account./billing. reserved (422 reserved_category)"
+    },
+    {
+     "name": "Priority",
+     "kind": "segmented",
+     "control": "linked GtkToggleButtons",
+     "data": "body.priority normal \\",
+     "rules": "high"
+    },
+    {
+     "name": "Title",
+     "kind": "text-field",
+     "control": "AdwEntryRow",
+     "data": "body.title",
+     "rules": "1–120"
+    },
+    {
+     "name": "Body",
+     "kind": "text-area",
+     "control": "GtkTextView in .card",
+     "data": "body.body",
+     "rules": "≤ 1,000"
+    },
+    {
+     "name": "Data",
+     "kind": "key/value editor",
+     "control": "AdwPreferencesGroup of AdwEntryRow pairs",
+     "data": "body.data",
+     "rules": "≤ 20 string pairs, 2 KB; key `substratal` reserved"
+    },
+    {
+     "name": "Open link",
+     "kind": "url-field",
+     "control": "AdwEntryRow input-purpose=url",
+     "data": "body.action_url",
+     "rules": "https or private scheme ≤ 2,048"
+    },
+    {
+     "name": "Advanced",
+     "kind": "disclosure",
+     "control": "AdwExpanderRow",
+     "data": "push (bool), badge, sound default\\",
+     "rules": "silent, collapse_key, ttl_seconds"
+    },
+    {
+     "name": "Payload size",
+     "kind": "meters",
+     "control": "GtkLevelBar",
+     "data": "client estimate of the 4 KB push payload",
+     "rules": "422 notification_too_large → details.bytes/max"
+    },
+    {
+     "name": "Preview",
+     "kind": "card",
+     "control": ".card box",
+     "data": "lock-screen style preview per platform",
+     "rules": "warns: lock screens show title/body — keep sensitive content out"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Send",
+     "call": "POST /users/{id}/notifications (Idempotency-Key)",
+     "result": "201 → result panel with push.status / skip_reason; 403 entitlement_required → recipient has no access; 429 scope sender\\"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "GLB-01",
+   "title": "Command palette",
+   "section_heading": "G · Global / Shell",
+   "domain": "G Global / Shell",
+   "route": "(overlay)",
+   "archetype": "overlay",
+   "phase": "MVP",
+   "who": "Signed in",
+   "purpose": "Jump anywhere and run any action by typing.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "Popover / overlay",
+   "elements": [
+    {
+     "name": "Query",
+     "kind": "search",
+     "control": "GtkSearchEntry",
+     "data": "",
+     "rules": "Cmd/Ctrl+K (desktop), search button (touch)"
+    },
+    {
+     "name": "Results",
+     "kind": "grouped list",
+     "control": "GtkListBox headers",
+     "data": "Navigation, Apps (launch), Users (GET /users?q), Orgs, Inbox (recent notifications), Actions (Invite user, Create key, Upgrade to Standard, Mark all read…)",
+     "rules": "permission-filtered; recent items first; ID prefixes resolve directly"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "GLB-02",
+   "title": "Manage hub",
+   "section_heading": "G · Global / Shell",
+   "domain": "G Global / Shell",
+   "route": "/manage",
+   "archetype": "hub",
+   "phase": "MVP",
+   "who": "Any admin or developer permission",
+   "purpose": "Compact-layout landing list for the Administration and Developer sections.",
+   "loads": "",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "Collapsed sidebar page",
+   "elements": [
+    {
+     "name": "Administration",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Users, Access, Roles, Audit Log, Send notification — those the caller may open, each with a live count",
+     "rules": "section hidden when no rights"
+    },
+    {
+     "name": "Developer",
+     "kind": "list",
+     "control": "GtkListBox .boxed-list",
+     "data": "Applications, API Keys, Webhooks, Tenant — with counts and health (unhealthy webhooks, failed push credentials)",
+     "rules": "section hidden when no rights"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "GLB-03",
+   "title": "System states",
+   "section_heading": "G · Global / Shell",
+   "domain": "G Global / Shell",
+   "route": "(global)",
+   "archetype": "overlay",
+   "phase": "MVP",
+   "who": "—",
+   "purpose": "App-wide banners and blocking states.",
+   "loads": "",
+   "states": "",
+   "notes": "`POST /auth/oauth/token` is called by the launched Application (PKCE exchange), never by the Hub.",
+   "entry_points": "",
+   "container": "Popover / overlay",
+   "elements": [
+    {
+     "name": "Offline",
+     "kind": "banner",
+     "control": "AdwBanner",
+     "data": "network status",
+     "rules": "reads from cache, writes disabled with explanation"
+    },
+    {
+     "name": "Maintenance / tenant migrating",
+     "kind": "banner",
+     "control": "AdwBanner",
+     "data": "503 service_unavailable + Retry-After",
+     "rules": "countdown, auto-retry reads"
+    },
+    {
+     "name": "Session ended",
+     "kind": "modal → AUTH-01",
+     "control": "AdwAlertDialog → AUTH-01",
+     "data": "401 after failed refresh",
+     "rules": "preserve destination"
+    },
+    {
+     "name": "Forbidden",
+     "kind": "inline state",
+     "control": "GtkSpinner on tile",
+     "data": "403",
+     "rules": "COPY"
+    },
+    {
+     "name": "Not built yet",
+     "kind": "inline state",
+     "control": "GtkSpinner on tile",
+     "data": "501 not_implemented (Notifications today)",
+     "rules": "hide the feature behind its flag; never show an error to end users"
+    },
+    {
+     "name": "Update available",
+     "kind": "banner",
+     "control": "AdwBanner",
+     "data": "`Deprecation` + `Sunset` response headers on this build's API version",
+     "rules": "once per day; shows the sunset date; \"Update\" opens the store / updater (Web: reload); dismissible until 14 days before `Sunset`"
+    },
+    {
+     "name": "Update required",
+     "kind": "blocking screen",
+     "control": "AdwStatusPage window",
+     "data": "400 unsupported_api_version (`details.supported`)",
+     "rules": "stops all API traffic; \"Update\" opens the store / updater (Web: reload); re-checks on foreground. Never shown for `api_version_required`, which is a client bug"
+    }
+   ],
+   "actions": [
+    {
+     "action": "Silent token refresh",
+     "call": "POST /auth/token/refresh",
+     "result": "single-flight; rotate refresh token atomically (CLIENT-ARCHITECTURE §2)"
+    },
+    {
+     "action": "Connectivity probe",
+     "call": "GET /health",
+     "result": "used after offline/503 to decide when to clear the banner (exempt from `Substratal-Version`)"
+    },
+    {
+     "action": "Forced sign-out",
+     "call": "POST /auth/logout",
+     "result": "on session_revoked or user request; the server deactivates this session's push devices"
+    },
+    {
+     "action": "Badge refresh",
+     "call": "GET /users/me/notifications/unread-count",
+     "result": "on launch, foreground, after a push arrives, and every 60 s while visible (Windows/Linux: also in background) → app icon/Dock/taskbar/PWA badge"
+    }
+   ],
+   "platforms": [
+    "all"
+   ]
+  },
+  {
+   "id": "OPS-01",
+   "title": "Overview",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/ops",
+   "archetype": "detail",
+   "phase": "Console M3 (web only)",
+   "who": "operations.view (superadmin until G10)",
+   "purpose": "Is production healthy right now, and is anything costing or failing?",
+   "loads": "`GET /health` (API) · `GET /ops/metrics?panel=overview&range=1h` · `GET /ops/alarms` · `GET /ops/cost` · `GET /audit-events?limit=10`",
+   "states": "Loading: skeleton after 300 ms; Error: per tile, so one failing source doesn't blank the page; Gateway `403` → \"Operations needs the operations.view permission.\"",
+   "notes": "",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Health",
+     "kind": "StatusBadge",
+     "control": "",
+     "data": "`GET /health`",
+     "rules": "Down → banner linking OPS-04"
+    },
+    {
+     "name": "Alarms",
+     "kind": "summary chips",
+     "control": "",
+     "data": "firing / OK counts",
+     "rules": "any firing → sidebar badge on Operations"
+    },
+    {
+     "name": "Traffic tiles",
+     "kind": "metric tiles",
+     "control": "",
+     "data": "requests, 4xx rate, 5xx rate, p95 latency, Lambda errors and throttles, Aurora ACU, webhook DLQ depth",
+     "rules": "each tile → OPS-02 at that metric"
+    },
+    {
+     "name": "Cost",
+     "kind": "progress bar",
+     "control": "",
+     "data": "month-to-date vs warn and hard budgets",
+     "rules": "→ OPS-07"
+    },
+    {
+     "name": "Recent security events",
+     "kind": "list",
+     "control": "",
+     "data": "→ SEC-01",
+     "rules": "5 newest"
+    },
+    {
+     "name": "Recent admin activity",
+     "kind": "list",
+     "control": "",
+     "data": "`GET /audit-events`",
+     "rules": "→ AUD-01"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "OPS-02",
+   "title": "Traffic & latency",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/ops/traffic",
+   "archetype": "detail",
+   "phase": "Console M3 (web only)",
+   "who": "operations.view",
+   "purpose": "Trends and SLO tracking.",
+   "loads": "`GET /ops/metrics?panel=traffic&range={1h|24h|7d|30d}`",
+   "states": "Loading: skeleton after 300 ms; Error: inline with Retry",
+   "notes": "",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Range",
+     "kind": "segmented control",
+     "control": "",
+     "data": "1h · 24h · 7d · 30d",
+     "rules": "in the URL"
+    },
+    {
+     "name": "Charts",
+     "kind": "time series",
+     "control": "",
+     "data": "requests, 4xx, 5xx, p95 latency, throttles",
+     "rules": "accessible table view of each chart (ACCESSIBILITY)"
+    },
+    {
+     "name": "SLOs",
+     "kind": "progress + burn rate",
+     "control": "",
+     "data": "99.9 % non-5xx; p95 < 150 ms on effective-permissions, app-tokens and oauth/token; p95 < 400 ms elsewhere",
+     "rules": "per-operation SLOs hidden until [G6 #43](https://github.com/CompositeCode/substratalapps.com/issues/43) gives per-operation data"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "OPS-03",
+   "title": "Logs",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/ops/logs",
+   "archetype": "table",
+   "phase": "Console M3 (web only)",
+   "who": "operations.view",
+   "purpose": "Find what happened to one request, user or key.",
+   "loads": "`POST /ops/logs/query {template, params, range}` → `GET /ops/logs/query/{id}` (poll every 2 s until complete)",
+   "states": "Loading: progress while the query runs; Empty: \"No log lines match.\"; Error: inline with Retry",
+   "notes": "",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Query",
+     "kind": "select + typed fields",
+     "control": "",
+     "data": "a template from the gateway's catalog (by request ID, user, key, status, error code), never free text in v1",
+     "rules": "`?request_id=` deep link prefills"
+    },
+    {
+     "name": "Range",
+     "kind": "segmented control",
+     "control": "",
+     "data": "default 24 h",
+     "rules": "longer ranges warn about query cost"
+    },
+    {
+     "name": "Rows",
+     "kind": "table",
+     "control": "",
+     "data": "timestamp, log group, level, message fields",
+     "rules": "request ID links to AUD-01 filtered and back"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "SEC-01",
+   "title": "Security events",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/ops/security",
+   "archetype": "table",
+   "phase": "Console M3 (web only)",
+   "who": "operations.view",
+   "purpose": "Spot attacks and lockouts.",
+   "loads": "`POST /ops/logs/query {template: security_events, range}` · `GET /ops/metrics?panel=security`",
+   "states": "",
+   "notes": "Calls through the web Hub's backend show the backend's IP until [G5 #42](https://github.com/CompositeCode/substratalapps.com/issues/42) adds a trusted client-IP header; say so in a caption.",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Group by",
+     "kind": "segmented control",
+     "control": "",
+     "data": "user · IP · key",
+     "rules": ""
+    },
+    {
+     "name": "Rows",
+     "kind": "table",
+     "control": "",
+     "data": "failed logins, lockouts, MFA challenges, refresh-token reuse, 403 denials, `destructive_operation_restricted`, `api_key_in_browser`",
+     "rules": "user → USR-03; key → KEY-04"
+    },
+    {
+     "name": "Actions",
+     "kind": "menu",
+     "control": "",
+     "data": "→ USR-05 Suspend · USR-04 Sign out everywhere · KEY-04 Revoke",
+     "rules": "each is the normal API call, audited with the person as actor"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "OPS-04",
+   "title": "Alarms",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/ops/alarms",
+   "archetype": "table",
+   "phase": "Console M3 (web only)",
+   "who": "operations.view",
+   "purpose": "What's firing, what fired, and who gets told.",
+   "loads": "`GET /ops/alarms`",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Rows",
+     "kind": "table",
+     "control": "",
+     "data": "alarm name, StatusBadge (OK · ALARM · INSUFFICIENT_DATA), since, threshold",
+     "rules": "firing first"
+    },
+    {
+     "name": "History",
+     "kind": "popover",
+     "control": "",
+     "data": "state changes for one alarm",
+     "rules": "links to the matching OPS-03 query"
+    },
+    {
+     "name": "Subscribers",
+     "kind": "list",
+     "control": "",
+     "data": "email subscriptions to the alarm topic, with pending confirmations",
+     "rules": "read-only in v1; changing them is Terraform"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "OPS-05",
+   "title": "Jobs & delivery",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/ops/jobs",
+   "archetype": "table",
+   "phase": "Console M3 (web only)",
+   "who": "operations.view",
+   "purpose": "Are the scheduled jobs and deliveries keeping up?",
+   "loads": "`GET /ops/jobs`",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Jobs",
+     "kind": "table",
+     "control": "",
+     "data": "each scheduled job: schedule, last run, outcome, duration",
+     "rules": "outcome is inferred from logs until [G9 #46](https://github.com/CompositeCode/substratalapps.com/issues/46) records runs"
+    },
+    {
+     "name": "Delivery",
+     "kind": "metric tiles",
+     "control": "",
+     "data": "webhook and push queue depth, DLQ depth, failure rate",
+     "rules": "failures across subscriptions need [G8 #45](https://github.com/CompositeCode/substratalapps.com/issues/45); until then link WHK-03 per webhook"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "OPS-06",
+   "title": "Releases",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/ops/releases",
+   "archetype": "table",
+   "phase": "Console M3 (web only)",
+   "who": "operations.view",
+   "purpose": "What's deployed.",
+   "loads": "`GET /ops/releases`",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Functions",
+     "kind": "table",
+     "control": "",
+     "data": "function, `live` alias → version → commit SHA, deployed at",
+     "rules": "SHA links to the commit"
+    },
+    {
+     "name": "Docs",
+     "kind": "key-value",
+     "control": "",
+     "data": "published spec version",
+     "rules": ""
+    },
+    {
+     "name": "Links",
+     "kind": "link-buttons",
+     "control": "",
+     "data": "release, deploy and rollback workflows",
+     "rules": "open GitHub; the console never deploys"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "OPS-07",
+   "title": "Cost",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/ops/cost",
+   "archetype": "detail",
+   "phase": "Console M3 (web only)",
+   "who": "operations.view",
+   "purpose": "Spend against the budgets.",
+   "loads": "`GET /ops/cost` (cached 6 h by the gateway)",
+   "states": "",
+   "notes": "Show \"Updated {time}\" because the data is up to 6 hours old.",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Budget",
+     "kind": "progress bar",
+     "control": "",
+     "data": "month-to-date and forecast vs warn and hard budgets",
+     "rules": "forecast over warn → warning banner"
+    },
+    {
+     "name": "By service",
+     "kind": "bar chart + table",
+     "control": "",
+     "data": "cost by AWS service, this month",
+     "rules": ""
+    },
+    {
+     "name": "Anomalies",
+     "kind": "list",
+     "control": "",
+     "data": "recent cost anomalies",
+     "rules": ""
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "CFG-01",
+   "title": "Configuration",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/ops/config",
+   "archetype": "settings",
+   "phase": "Console M3 (web only)",
+   "who": "operations.view",
+   "purpose": "What production is actually running with.",
+   "loads": "`GET /ops/config`",
+   "states": "",
+   "notes": "Read-only. Terraform-owned values say \"Change this in the API repo\" and link to the variable.",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Per function",
+     "kind": "key-value groups",
+     "control": "",
+     "data": "non-secret settings from an allow-list: URLs, CORS origins, backends, log level",
+     "rules": "secrets never leave the gateway"
+    },
+    {
+     "name": "Policy",
+     "kind": "key-value",
+     "control": "",
+     "data": "rate-limit defaults, token lifetimes, password policy, API version served",
+     "rules": "each with its source (Terraform variable or code constant)"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "CFG-02",
+   "title": "Feature flags",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/ops/config/flags",
+   "archetype": "settings",
+   "phase": "Console M4 (web only)",
+   "who": "operations.view (read), operations.manage (write, after G10)",
+   "purpose": "See, and later change, the client feature flags (CLIENT-ARCHITECTURE §10).",
+   "loads": "until [G11 #48](https://github.com/CompositeCode/substratalapps.com/issues/48): the web build's `/config/flags.json`; after: the API's settings endpoint",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Flags",
+     "kind": "toggle list",
+     "control": "",
+     "data": "every flag in CLIENT-ARCHITECTURE §10",
+     "rules": "read-only until G11; then editable and audited"
+    },
+    {
+     "name": "Platform settings",
+     "kind": "settings rows",
+     "control": "",
+     "data": "signup open, read-only maintenance mode, per-key rate-limit overrides ([G12 #49](https://github.com/CompositeCode/substratalapps.com/issues/49))",
+     "rules": "hidden until the API has them"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "RPT-01",
+   "title": "Reports",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/admin/reports",
+   "archetype": "detail",
+   "phase": "Console M4 (web only)",
+   "who": "users.list (platform reports); an Application owner sees only their own app",
+   "purpose": "Growth, access, usage, subscribers and delivery over time.",
+   "loads": "after [G7 #44](https://github.com/CompositeCode/substratalapps.com/issues/44): `GET /usage` · `GET /stats`. Before: only reports small enough to build by paging list endpoints.",
+   "states": "",
+   "notes": "Revenue stays in Stripe; link to the Stripe dashboard instead of mirroring it.",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Report",
+     "kind": "select",
+     "control": "",
+     "data": "platform growth · access · usage · subscribers · delivery",
+     "rules": "subscribers needs [G20 #57](https://github.com/CompositeCode/substratalapps.com/issues/57)"
+    },
+    {
+     "name": "Range",
+     "kind": "date range",
+     "control": "",
+     "data": "",
+     "rules": "in the URL"
+    },
+    {
+     "name": "Chart + table",
+     "kind": "chart, table",
+     "control": "",
+     "data": "the report's series",
+     "rules": "accessible table view"
+    },
+    {
+     "name": "Export",
+     "kind": "button",
+     "control": "",
+     "data": "CSV of the loaded series",
+     "rules": "client-side"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  },
+  {
+   "id": "INT-01",
+   "title": "Integrations",
+   "section_heading": "C · Console",
+   "domain": "C Console",
+   "route": "/dev/integrations",
+   "archetype": "list",
+   "phase": "Console M2 (web only)",
+   "who": "webhooks.manage or api_keys.manage",
+   "purpose": "Every way to connect Substratal to other tools, in one place.",
+   "loads": "`GET /webhooks?scope=platform` · `GET /api-keys`",
+   "states": "",
+   "notes": "",
+   "entry_points": "",
+   "container": "",
+   "elements": [
+    {
+     "name": "Platform webhooks",
+     "kind": "list",
+     "control": "",
+     "data": "→ WHK-01 filtered to `scope: platform`",
+     "rules": "for SIEM, warehouse or chat tools"
+    },
+    {
+     "name": "Agent and service keys",
+     "kind": "list",
+     "control": "",
+     "data": "→ KEY-01 filtered by `intended_use`",
+     "rules": ""
+    },
+    {
+     "name": "MCP server",
+     "kind": "instructions",
+     "control": "",
+     "data": "`https://api.substratalapps.com/mcp` with a restricted agent key",
+     "rules": "copy button"
+    },
+    {
+     "name": "Alarm destinations",
+     "kind": "list",
+     "control": "",
+     "data": "→ OPS-04 subscribers; chat delivery via AWS Chatbot",
+     "rules": "Terraform-owned: link to the variable"
+    },
+    {
+     "name": "Stripe",
+     "kind": "key-value",
+     "control": "",
+     "data": "portal links; `billing_unavailable` state",
+     "rules": ""
+    },
+    {
+     "name": "Log export",
+     "kind": "text",
+     "control": "",
+     "data": "a CloudWatch subscription filter, configured in Terraform",
+     "rules": "documentation only"
+    }
+   ],
+   "actions": [],
+   "platforms": [
+    "web"
+   ]
+  }
+ ]
+}

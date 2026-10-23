@@ -1,0 +1,26 @@
+[package]
+name = "substratalctl"
+description = "Command-line client for the Substratal Apps Platform API, sharing the Hub's core."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "substratalctl"
+path = "src/main.rs"
+
+[features]
+default = ["keyring"]
+keyring = ["substratal-core/keyring"]
+
+[dependencies]
+substratal-core.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
