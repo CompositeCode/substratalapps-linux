@@ -11,8 +11,8 @@ repository = "https://github.com/CompositeCode/substratalapps-linux"
 rust-version = "1.85"
 
 [workspace.dependencies]
-substratal-core = { path = "crates/substratal-core" }
-substratalctl = { path = "crates/substratalctl" }
+substratal-core = { path = "crates/substratal-core", default-features = false }
+substratalctl = { path = "crates/substratalctl", default-features = false }
 anyhow = "1"
 async-channel = "2"
 clap = { version = "4", features = ["derive", "env"] }

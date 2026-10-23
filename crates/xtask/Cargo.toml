@@ -6,8 +6,8 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-substratal-core = { workspace = true, default-features = false }
-substratalctl = { workspace = true, default-features = false }
+substratal-core.workspace = true
+substratalctl.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 clap-markdown = "0.1"
