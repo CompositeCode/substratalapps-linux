@@ -1,0 +1,15 @@
+[package]
+name = "xtask"
+description = "Repo automation: generates the help center's reference pages from the code and the specs."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+substratal-core = { workspace = true, default-features = false }
+substratalctl = { workspace = true, default-features = false }
+anyhow.workspace = true
+clap.workspace = true
+clap-markdown = "0.1"
+serde_json.workspace = true
+serde_yaml.workspace = true

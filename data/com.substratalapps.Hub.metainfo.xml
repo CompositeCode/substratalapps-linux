@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.substratalapps.Hub</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Substratal</name>
+  <summary>Your Substratal apps, organizations and access</summary>
+  <developer id="com.substratalapps">
+    <name>Composite Code</name>
+  </developer>
+  <description>
+    <p>The Substratal Hub: launch your Substratal apps, read your notifications, choose your plan and run your organizations.</p>
+    <p>For staff and app developers it is also the management console for the Substratal Apps Platform API: users, access, roles, applications, API keys, webhooks, push credentials and the audit log.</p>
+  </description>
+  <categories>
+    <category>Office</category>
+    <category>Network</category>
+  </categories>
+  <launchable type="desktop-id">com.substratalapps.Hub.desktop</launchable>
+  <icon type="stock">com.substratalapps.Hub</icon>
+  <branding>
+    <color type="primary" scheme_preference="light">#E8E8F7</color>
+    <color type="primary" scheme_preference="dark">#15132E</color>
+  </branding>
+  <url type="homepage">https://compositecode.github.io/substratalapps-linux/</url>
+  <url type="help">https://compositecode.github.io/substratalapps-linux/</url>
+  <url type="bugtracker">https://github.com/CompositeCode/substratalapps-linux/issues</url>
+  <url type="vcs-browser">https://github.com/CompositeCode/substratalapps-linux</url>
+  <content_rating type="oars-1.1"/>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <releases>
+    <release version="0.1.0" date="2026-10-23" type="development">
+      <description>
+        <p>First skeleton: navigation, sign-in, users, themes, help.</p>
+      </description>
+    </release>
+  </releases>
+</component>

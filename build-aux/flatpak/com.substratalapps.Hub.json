@@ -1,0 +1,70 @@
+{
+  "id": "com.substratalapps.Hub",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "50",
+  "sdk": "org.gnome.Sdk",
+  "sdk-extensions": [
+    "org.freedesktop.Sdk.Extension.rust-stable"
+  ],
+  "command": "substratal-hub",
+  "finish-args": [
+    "--share=network",
+    "--share=ipc",
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--device=dri"
+  ],
+  "build-options": {
+    "append-path": "/usr/lib/sdk/rust-stable/bin",
+    "env": {
+      "CARGO_HOME": "/run/build/substratal-hub/cargo",
+      "CARGO_NET_GIT_FETCH_WITH_CLI": "true"
+    },
+    "build-args": [
+      "--share=network"
+    ]
+  },
+  "modules": [
+    {
+      "name": "blueprint-compiler",
+      "buildsystem": "meson",
+      "cleanup": [
+        "*"
+      ],
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://gitlab.gnome.org/GNOME/blueprint-compiler.git",
+          "tag": "v0.16.0"
+        }
+      ]
+    },
+    {
+      "name": "substratal-hub",
+      "buildsystem": "simple",
+      "build-commands": [
+        "cargo build --release --locked -p substratal-hub -p substratalctl",
+        "install -Dm755 target/release/substratal-hub /app/bin/substratal-hub",
+        "install -Dm755 target/release/substratalctl /app/bin/substratalctl",
+        "install -Dm644 data/com.substratalapps.Hub.desktop /app/share/applications/com.substratalapps.Hub.desktop",
+        "install -Dm644 data/com.substratalapps.Hub.metainfo.xml /app/share/metainfo/com.substratalapps.Hub.metainfo.xml",
+        "install -Dm644 data/com.substratalapps.Hub.service /app/share/dbus-1/services/com.substratalapps.Hub.service",
+        "cp -r data/icons/hicolor /app/share/icons/"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "../..",
+          "skip": [
+            "target",
+            "_site",
+            "_screens",
+            "docs",
+            "build-aux/flatpak/.flatpak-builder",
+            "build-aux/flatpak/build-dir"
+          ]
+        }
+      ]
+    }
+  ]
+}

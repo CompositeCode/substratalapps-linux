@@ -1,0 +1,114 @@
+# Keeps the vendored Platform API spec (vendor/openapi.yaml) and the help
+# center's API pages current with the API repo.
+#
+# Runs every 6 hours, on demand, and when the API repo sends a
+# `repository_dispatch` of type `api-spec-updated` (see docs/contributing.md
+# for the one-step snippet to add there). If openapi.yaml changed, it:
+#   1. diffs old vs new with oasdiff (changelog + breaking-change check),
+#   2. adds an entry to docs/api/changelog.md,
+#   3. updates vendor/openapi.yaml and regenerates the API pages,
+#   4. opens (or updates) a pull request, labelled `breaking-change` when
+#      oasdiff finds one, so the app code gets reviewed against the change.
+name: API spec sync
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [api-spec-updated]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: api-spec-sync
+  cancel-in-progress: false
+
+env:
+  SPEC_URL: https://raw.githubusercontent.com/CompositeCode/substratalapps.com/main/docs/openapi.yaml
+  OASDIFF_VERSION: 1.34.1
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch the API's current spec
+        id: fetch
+        run: |
+          curl -fsSL "$SPEC_URL" -o _new.yaml
+          if cmp -s vendor/openapi.yaml _new.yaml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "openapi.yaml unchanged."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "version=$(python3 -c 'import yaml;print(yaml.safe_load(open("_new.yaml"))["info"]["version"])')" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Diff with oasdiff
+        if: steps.fetch.outputs.changed == 'true'
+        id: diff
+        run: |
+          curl -fsSL "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz" | tar -xz oasdiff
+          ./oasdiff changelog vendor/openapi.yaml _new.yaml --format markdown > _changelog.md || true
+          if ./oasdiff breaking vendor/openapi.yaml _new.yaml --fail-on ERR > _breaking.txt; then
+            echo "breaking=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "breaking=true" >> "$GITHUB_OUTPUT"
+          fi
+          cat _changelog.md
+
+      - name: Add an API changelog entry
+        if: steps.fetch.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.fetch.outputs.version }}
+          BREAKING: ${{ steps.diff.outputs.breaking }}
+        run: |
+          python3 - <<'PY'
+          import datetime, os, pathlib
+          path = pathlib.Path("docs/api/changelog.md")
+          body = pathlib.Path("_changelog.md").read_text().strip()
+          # oasdiff starts with its own H1/H2 headings; demote them under ours.
+          body = "\n".join(("###" + l.lstrip("#")) if l.startswith("#") else l for l in body.splitlines())
+          warn = ""
+          if os.environ["BREAKING"] == "true":
+              warn = "\n**Breaking for clients of this API version** (oasdiff). Check the app before merging.\n{: .important }\n"
+          entry = f"## {os.environ['VERSION']} — {datetime.date.today().isoformat()}\n{warn}\n{body or 'No API-visible changes (descriptions or examples only).'}\n"
+          marker = "<!-- api-changelog:insert-here -->"
+          text = path.read_text()
+          path.write_text(text.replace(marker, marker + "\n\n" + entry, 1))
+          PY
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.fetch.outputs.changed == 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: steps.fetch.outputs.changed == 'true'
+
+      - name: Update vendored spec and regenerate API pages
+        if: steps.fetch.outputs.changed == 'true'
+        run: |
+          mv _new.yaml vendor/openapi.yaml
+          rm -f oasdiff _changelog.md _breaking.txt
+          cargo xtask gen-docs
+
+      - uses: peter-evans/create-pull-request@v8
+        if: steps.fetch.outputs.changed == 'true'
+        with:
+          # A PAT (SYNC_TOKEN) lets the PR trigger CI; GITHUB_TOKEN PRs don't.
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+          branch: automation/api-spec-sync
+          delete-branch: true
+          commit-message: "Sync Platform API spec to ${{ steps.fetch.outputs.version }}"
+          title: "Sync Platform API spec to ${{ steps.fetch.outputs.version }}"
+          labels: |
+            api-spec
+            ${{ steps.diff.outputs.breaking == 'true' && 'breaking-change' || '' }}
+          body: |
+            The Platform API's `openapi.yaml` changed upstream. This updates `vendor/openapi.yaml`, regenerates the help center's API pages (`cargo xtask gen-docs`) and adds an entry to `docs/api/changelog.md`.
+
+            Breaking changes found by oasdiff: **${{ steps.diff.outputs.breaking }}**
+
+            Before merging, check the app against the change: hand-written models in `crates/substratal-core/src/models.rs`, and whether `Substratal-Version` (`crates/substratal-core/src/version.rs`) needs to move.
