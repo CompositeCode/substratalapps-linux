@@ -1,10 +1,6 @@
 /target
 /_site
-/docs/_site
-/docs/.jekyll-cache
-/docs/.bundle
-/docs/vendor
-/docs/_data/versions.yml
+/_specs
 /_archive
 .DS_Store
 /build-aux/flatpak/.flatpak-builder

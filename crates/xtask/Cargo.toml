@@ -11,5 +11,3 @@ substratalctl.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 clap-markdown = "0.1"
-serde_json.workspace = true
-serde_yaml.workspace = true

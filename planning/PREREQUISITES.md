@@ -17,7 +17,7 @@ The Platform API's version is a **request header, not part of the URL**.
 - the API's Conventions → Versioning page
 - the client specs (CLIENT-ARCHITECTURE §4.1, CHANGES §00, OPEN-QUESTIONS #23)
 - this repo's code: `crates/substratal-core/src/version.rs` and `config.rs`
-- the help center's [API versioning](../docs/api/versioning.md) page
+- the Hub help center's [API versioning](https://compositecode.github.io/substratalapps-applications-specs/help/developers/api-versioning.html) page
 
 The two plan documents in this folder were written without `/v1` paths. The sibling macOS plan still uses `/v1/ops/...`.
 

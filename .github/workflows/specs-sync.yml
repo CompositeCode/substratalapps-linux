@@ -1,6 +1,5 @@
 # Keeps the spec-derived files (screen registry, themes, icons, status
-# semantics) and the help center's screen pages current with the client
-# specs package. Daily and on demand; opens a pull request when anything
+# semantics) current with the client specs package. Daily and on demand; opens a pull request when anything
 # changed.
 name: Specs sync
 
@@ -34,10 +33,6 @@ jobs:
           python3 scripts/sync-specs.py --specs _specs
           echo "commit=$(git -C _specs rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           rm -rf _specs
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Regenerate screen pages
-        run: cargo xtask gen-docs
       - uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.SYNC_TOKEN || github.token }}
@@ -47,6 +42,6 @@ jobs:
           title: "Sync client specs (${{ steps.sync.outputs.commit }})"
           labels: specs
           body: |
-            The client specs package changed upstream (`CompositeCode/substratalapps-applications-specs@${{ steps.sync.outputs.commit }}`). This regenerates `data/spec/`, the bundled themes and icons, and the help center's screen pages.
+            The client specs package changed upstream (`CompositeCode/substratalapps-applications-specs@${{ steps.sync.outputs.commit }}`). This regenerates `data/spec/` and the bundled themes and icons.
 
             New or changed screens appear in the app as spec scaffolds automatically; check `cargo test` (route and navigation tests) and any hand-built screens they affect.

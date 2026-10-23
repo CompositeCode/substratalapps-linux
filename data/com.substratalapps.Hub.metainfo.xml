@@ -22,8 +22,8 @@
     <color type="primary" scheme_preference="light">#E8E8F7</color>
     <color type="primary" scheme_preference="dark">#15132E</color>
   </branding>
-  <url type="homepage">https://compositecode.github.io/substratalapps-linux/</url>
-  <url type="help">https://compositecode.github.io/substratalapps-linux/</url>
+  <url type="homepage">https://compositecode.github.io/substratalapps-applications-specs/help/guides/linux.html</url>
+  <url type="help">https://compositecode.github.io/substratalapps-applications-specs/help/</url>
   <url type="bugtracker">https://github.com/CompositeCode/substratalapps-linux/issues</url>
   <url type="vcs-browser">https://github.com/CompositeCode/substratalapps-linux</url>
   <content_rating type="oars-1.1"/>

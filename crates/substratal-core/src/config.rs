@@ -6,8 +6,11 @@ use url::Url;
 pub const PRODUCTION_API: &str = "https://api.substratalapps.com";
 /// The API repo's local devserver (`make up && make run`).
 pub const LOCAL_API: &str = "http://localhost:8080";
-/// Root of the Substratal Hub help center (this repo's `docs/`, on GitHub Pages).
-pub const HELP_BASE: &str = "https://compositecode.github.io/substratalapps-linux/";
+/// Root of the Substratal Hub help center: the one documentation site for
+/// every Hub app, built from `help/` in the specs repo
+/// (CompositeCode/substratalapps-applications-specs).
+pub const HELP_BASE: &str =
+    "https://compositecode.github.io/substratalapps-applications-specs/help/";
 /// The Platform API's own specification and reference.
 pub const API_DOCS: &str = "https://compositecode.github.io/substratalapps.com/";
 /// The web dashboard, where emailed links and Stripe returns land.
@@ -76,11 +79,11 @@ impl Environment {
     }
 }
 
-/// Help center page for a screen, e.g. `…/screens/usr-01/`. Every Hub app
+/// Help center page for a screen, e.g. `…/help/screens/usr-01.html`. Every Hub app
 /// (Linux, macOS, Windows, iOS, Android, Web) shares these screen IDs, so the
 /// same URL works as a help link from any of them.
 pub fn help_url(screen_id: &str) -> String {
-    format!("{HELP_BASE}screens/{}/", screen_id.to_ascii_lowercase())
+    format!("{HELP_BASE}screens/{}.html", screen_id.to_ascii_lowercase())
 }
 
 #[cfg(test)]
@@ -115,7 +118,7 @@ mod tests {
     fn help_urls_are_lowercase() {
         assert_eq!(
             help_url("USR-01"),
-            "https://compositecode.github.io/substratalapps-linux/screens/usr-01/"
+            "https://compositecode.github.io/substratalapps-applications-specs/help/screens/usr-01.html"
         );
     }
 }

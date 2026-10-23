@@ -1,14 +1,12 @@
-# Keeps the vendored Platform API spec (vendor/openapi.yaml) and the help
-# center's API pages current with the API repo.
+# Keeps the vendored Platform API spec (vendor/openapi.yaml) current with
+# the API repo. (The help center's API reference is rebuilt from the live
+# spec by the specs repo itself.)
 #
-# Runs every 6 hours, on demand, and when the API repo sends a
-# `repository_dispatch` of type `api-spec-updated` (see docs/contributing.md
-# for the one-step snippet to add there). If openapi.yaml changed, it:
-#   1. diffs old vs new with oasdiff (changelog + breaking-change check),
-#   2. adds an entry to docs/api/changelog.md,
-#   3. updates vendor/openapi.yaml and regenerates the API pages,
-#   4. opens (or updates) a pull request, labelled `breaking-change` when
-#      oasdiff finds one, so the app code gets reviewed against the change.
+# Runs every 6 hours, on demand, and on a `repository_dispatch` of type
+# `api-spec-updated`. If openapi.yaml changed, it diffs old vs new with
+# oasdiff and opens (or updates) a pull request with the changelog,
+# labelled `breaking-change` when oasdiff finds one, so the app code gets
+# reviewed against the change.
 name: API spec sync
 
 on:
@@ -61,38 +59,13 @@ jobs:
           fi
           cat _changelog.md
 
-      - name: Add an API changelog entry
+      - name: Update the vendored spec
         if: steps.fetch.outputs.changed == 'true'
-        env:
-          VERSION: ${{ steps.fetch.outputs.version }}
-          BREAKING: ${{ steps.diff.outputs.breaking }}
-        run: |
-          python3 - <<'PY'
-          import datetime, os, pathlib
-          path = pathlib.Path("docs/api/changelog.md")
-          body = pathlib.Path("_changelog.md").read_text().strip()
-          # oasdiff starts with its own H1/H2 headings; demote them under ours.
-          body = "\n".join(("###" + l.lstrip("#")) if l.startswith("#") else l for l in body.splitlines())
-          warn = ""
-          if os.environ["BREAKING"] == "true":
-              warn = "\n**Breaking for clients of this API version** (oasdiff). Check the app before merging.\n{: .important }\n"
-          entry = f"## {os.environ['VERSION']} — {datetime.date.today().isoformat()}\n{warn}\n{body or 'No API-visible changes (descriptions or examples only).'}\n"
-          marker = "<!-- api-changelog:insert-here -->"
-          text = path.read_text()
-          path.write_text(text.replace(marker, marker + "\n\n" + entry, 1))
-          PY
-
-      - uses: dtolnay/rust-toolchain@stable
-        if: steps.fetch.outputs.changed == 'true'
-      - uses: Swatinem/rust-cache@v2
-        if: steps.fetch.outputs.changed == 'true'
-
-      - name: Update vendored spec and regenerate API pages
-        if: steps.fetch.outputs.changed == 'true'
+        id: notes
         run: |
           mv _new.yaml vendor/openapi.yaml
+          { echo 'changelog<<EOF_CHANGELOG'; cat _changelog.md; echo 'EOF_CHANGELOG'; } >> "$GITHUB_OUTPUT"
           rm -f oasdiff _changelog.md _breaking.txt
-          cargo xtask gen-docs
 
       - uses: peter-evans/create-pull-request@v8
         if: steps.fetch.outputs.changed == 'true'
@@ -107,8 +80,10 @@ jobs:
             api-spec
             ${{ steps.diff.outputs.breaking == 'true' && 'breaking-change' || '' }}
           body: |
-            The Platform API's `openapi.yaml` changed upstream. This updates `vendor/openapi.yaml`, regenerates the help center's API pages (`cargo xtask gen-docs`) and adds an entry to `docs/api/changelog.md`.
+            The Platform API's `openapi.yaml` changed upstream. This updates `vendor/openapi.yaml`.
 
             Breaking changes found by oasdiff: **${{ steps.diff.outputs.breaking }}**
+
+            ${{ steps.notes.outputs.changelog }}
 
             Before merging, check the app against the change: hand-written models in `crates/substratal-core/src/models.rs`, and whether `Substratal-Version` (`crates/substratal-core/src/version.rs`) needs to move.
